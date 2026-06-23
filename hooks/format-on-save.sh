@@ -1,88 +1,125 @@
-#!/usr/bin/env bash
-#
-# format-on-save.sh
-# Hook: PostToolUse / Write|Edit
-#
-# Runs `biome check --write` on the file that was just written/edited.
-# Reads the tool-call JSON from stdin. ALWAYS exits 0 — it must never block
-# or error a write. No-ops silently when:
-#   - the file is not a .ts/.tsx file
-#   - no biome.json/biome.jsonc is found at or above the file
-#   - no biome binary is resolvable
-#
-# Pure bash + an optional JSON parser (python3/node). bunx is used only as a
-# last resort to obtain biome.
+#!/bin/bash
+# Auto-formats files after Claude edits them.
+# PostToolUse hook for Edit|Write.
+# Silent on success. All formatter stdout and stderr is redirected so the
+# hook contributes zero tokens on the common path. Auto-detects formatters
+# (requires both the binary AND a config file).
 
-set -uo pipefail
-
-INPUT="$(cat)"
-
-extract_file_path() {
-  if command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | python3 -c '
-import sys, json
-try:
-    d = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-v = (d.get("tool_input") or {}).get("file_path", "")
-sys.stdout.write(v if isinstance(v, str) else "")
-' 2>/dev/null && return 0
-  fi
-  if command -v node >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | node -e '
-let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const v=((JSON.parse(s).tool_input)||{}).file_path;process.stdout.write(typeof v==="string"?v:"")}catch(e){}});
-' 2>/dev/null && return 0
-  fi
-  printf '%s' "$INPUT" \
-    | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
-}
-
-FILE="$(extract_file_path)"
-[ -z "$FILE" ] && exit 0
-
-# Only TypeScript/TSX (Biome handles more; widen the case below if desired).
-case "$FILE" in
-  *.ts|*.tsx) ;;
-  *) exit 0 ;;
-esac
-
-# Resolve to an absolute path if possible.
-if [ "${FILE#/}" = "$FILE" ]; then
-  base="${CLAUDE_PROJECT_DIR:-$PWD}"
-  FILE="$base/$FILE"
+# Requires jq for JSON parsing.
+if ! command -v jq >/dev/null 2>&1; then
+  exit 0
 fi
-[ -f "$FILE" ] || exit 0
 
-# Walk up from the file's directory to find a biome config.
-find_up() {
-  local dir="$1" target="$2"
-  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
-    if [ -e "$dir/$target" ]; then printf '%s' "$dir"; return 0; fi
-    dir="$(dirname "$dir")"
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+
+if [ -z "$FILE_PATH" ] || [ ! -f "$FILE_PATH" ]; then
+  exit 0
+fi
+
+EXTENSION="${FILE_PATH##*.}"
+FORMATTED=false
+
+# Find the project root (nearest directory with a manifest or .git).
+find_project_root() {
+  local dir="$PWD"
+  while [ "$dir" != "/" ]; do
+    if [ -f "$dir/package.json" ] || [ -f "$dir/pyproject.toml" ] || [ -f "$dir/Cargo.toml" ] || [ -f "$dir/go.mod" ] || [ -d "$dir/.git" ]; then
+      echo "$dir"
+      return
+    fi
+    dir=$(dirname "$dir")
   done
-  [ -e "/$target" ] && { printf '%s' "/"; return 0; }
-  return 1
+  echo "$PWD"
 }
 
-start_dir="$(dirname "$FILE")"
-config_dir="$(find_up "$start_dir" biome.json || true)"
-[ -z "$config_dir" ] && config_dir="$(find_up "$start_dir" biome.jsonc || true)"
-[ -z "$config_dir" ] && exit 0   # no Biome config anywhere above the file
+ROOT=$(find_project_root)
 
-# Resolve a biome binary, preferring a project-local install.
-biome_bin=""
-bin_dir="$(find_up "$start_dir" node_modules/.bin/biome || true)"
-if [ -n "$bin_dir" ] && [ -x "$bin_dir/node_modules/.bin/biome" ]; then
-  biome_bin="$bin_dir/node_modules/.bin/biome"
-elif command -v biome >/dev/null 2>&1; then
-  biome_bin="biome"
+# Biome (JS, TS, JSON, CSS all-in-one). Faster than Prettier; check first.
+if [ "$FORMATTED" = false ] && [ -f "$ROOT/node_modules/.bin/biome" ] && { [ -f "$ROOT/biome.json" ] || [ -f "$ROOT/biome.jsonc" ]; }; then
+  case "$EXTENSION" in
+    js|jsx|ts|tsx|json|css)
+      npx biome format --write "$FILE_PATH" >/dev/null 2>&1 && FORMATTED=true
+      ;;
+  esac
 fi
 
-if [ -n "$biome_bin" ]; then
-  "$biome_bin" check --write "$FILE" >/dev/null 2>&1 || true
-elif command -v bunx >/dev/null 2>&1; then
-  bunx --bun @biomejs/biome check --write "$FILE" >/dev/null 2>&1 || true
+# Prettier (Node.js, TypeScript, web).
+if [ "$FORMATTED" = false ] && [ -f "$ROOT/node_modules/.bin/prettier" ]; then
+  HAS_PRETTIER_CONFIG=false
+  for cfg in .prettierrc .prettierrc.json .prettierrc.yml .prettierrc.yaml .prettierrc.js .prettierrc.cjs .prettierrc.mjs .prettierrc.toml prettier.config.js prettier.config.cjs prettier.config.mjs; do
+    if [ -f "$ROOT/$cfg" ]; then
+      HAS_PRETTIER_CONFIG=true
+      break
+    fi
+  done
+  if [ "$HAS_PRETTIER_CONFIG" = false ] && [ -f "$ROOT/package.json" ] && grep -q '"prettier"' "$ROOT/package.json" 2>/dev/null; then
+    HAS_PRETTIER_CONFIG=true
+  fi
+
+  if [ "$HAS_PRETTIER_CONFIG" = true ]; then
+    case "$EXTENSION" in
+      js|jsx|ts|tsx|json|css|scss|md|yaml|yml|html)
+        npx prettier --write "$FILE_PATH" >/dev/null 2>&1 && FORMATTED=true
+        ;;
+    esac
+  fi
+fi
+
+# Ruff (Python). Modern replacement for Black + isort.
+if [ "$FORMATTED" = false ] && command -v ruff >/dev/null 2>&1; then
+  HAS_RUFF_CONFIG=false
+  if [ -f "$ROOT/ruff.toml" ] || [ -f "$ROOT/.ruff.toml" ]; then
+    HAS_RUFF_CONFIG=true
+  elif [ -f "$ROOT/pyproject.toml" ] && grep -q '\[tool\.ruff\]' "$ROOT/pyproject.toml" 2>/dev/null; then
+    HAS_RUFF_CONFIG=true
+  fi
+
+  if [ "$HAS_RUFF_CONFIG" = true ]; then
+    case "$EXTENSION" in
+      py)
+        ruff format "$FILE_PATH" >/dev/null 2>&1
+        ruff check --fix "$FILE_PATH" >/dev/null 2>&1
+        FORMATTED=true
+        ;;
+    esac
+  fi
+fi
+
+# Black + isort (Python). Fallback if Ruff is not configured.
+if [ "$FORMATTED" = false ] && command -v black >/dev/null 2>&1; then
+  HAS_BLACK_CONFIG=false
+  if [ -f "$ROOT/pyproject.toml" ] && grep -q '\[tool\.black\]' "$ROOT/pyproject.toml" 2>/dev/null; then
+    HAS_BLACK_CONFIG=true
+  fi
+
+  if [ "$HAS_BLACK_CONFIG" = true ]; then
+    case "$EXTENSION" in
+      py)
+        black --quiet "$FILE_PATH" >/dev/null 2>&1
+        command -v isort >/dev/null 2>&1 && isort --quiet "$FILE_PATH" >/dev/null 2>&1
+        FORMATTED=true
+        ;;
+    esac
+  fi
+fi
+
+# Rust (rustfmt is standard, no config check needed).
+if [ "$FORMATTED" = false ] && command -v rustfmt >/dev/null 2>&1; then
+  case "$EXTENSION" in
+    rs)
+      rustfmt "$FILE_PATH" >/dev/null 2>&1 && FORMATTED=true
+      ;;
+  esac
+fi
+
+# Go (gofmt is standard, no config check needed).
+if [ "$FORMATTED" = false ] && command -v gofmt >/dev/null 2>&1; then
+  case "$EXTENSION" in
+    go)
+      gofmt -w "$FILE_PATH" >/dev/null 2>&1 && FORMATTED=true
+      ;;
+  esac
 fi
 
 exit 0

@@ -50,8 +50,7 @@ detected (one or two lines) before starting the categories.
 
 **Gap-analysis mode:** if `.claude/` already exists, read what's already there
 (agents, rules, hooks in `settings.json`) and only offer what's missing. Never
-overwrite an existing file without asking. Note for skills: "no existing
-`.claude/`" recommendations do not apply in this mode.
+overwrite an existing file without asking.
 
 ## Step 2 — Category-by-category selection
 
@@ -66,9 +65,9 @@ Go in this order, one turn each:
 3. **Hooks** — read `references/hooks-catalog.md`. List all 3; **always pre-mark
    `block-dangerous-commands` and `scan-secrets`**; pre-mark `format-on-save`
    when Biome is detected.
-4. **Skills** — read `references/skills-catalog.md`. Present the recommended set
-   (and the full list on request); the user picks which to install via
-   `bunx skills add`.
+4. **Skills** — read `references/skills-catalog.md`. Each skill is a GitHub repo URL
+   plus a skill name, installed with `bunx skills add <repo> --skill <name>`. Present
+   the recommended set (pre-marked from the scan); the user picks which to install.
 5. **CLAUDE.md template** — ask once whether to copy the template to `./CLAUDE.md`.
    If `CLAUDE.md` already exists, ask whether to overwrite (default: keep
    existing, skip).
@@ -89,8 +88,11 @@ After all categories are decided, perform the installs:
   the matching registration entries into `.claude/settings.json` (create if
   missing; merge without clobbering existing hooks; do not duplicate an entry
   that already exists). Use the JSON shape in `references/hooks-catalog.md`.
-- **Skills:** run the install command for each selected skill (one at a time).
-  Report failures without aborting the remaining installs.
+- **Skills:** for each selected skill, run
+  `bunx skills add <repo-url> --skill <skill-name> -a claude-code -y` from the project
+  directory (the repo URL and skill name come from the catalog). Private repos (e.g.
+  `madushan/next-pro-seo`) need `gh auth` — treat an auth failure as non-fatal and
+  continue. There is no marketplace/plugin install step.
 - **CLAUDE.md:** if selected, copy `${CLAUDE_PLUGIN_ROOT}/templates/CLAUDE.template.md`
   → `./CLAUDE.md`.
 
@@ -107,7 +109,7 @@ Write `.claude/.madushan-setup.json` recording the run:
     "agents": ["code-reviewer", "..."],
     "rules": ["typescript", "..."],
     "hooks": ["block-dangerous-commands", "..."],
-    "skills": ["engineering:code-review", "..."],
+    "skills": ["frontend-design", "next-pro-seo", "..."],
     "claudeMd": true
   }
 }

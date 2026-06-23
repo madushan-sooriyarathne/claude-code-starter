@@ -67,6 +67,7 @@ TARGET="$(cd "$TARGET" && pwd)"
 # ========================================================================
 HAS_PKG=0; HAS_MONOREPO=0; HAS_TURBO=0; HAS_NEXT=0; HAS_DRIZZLE=0
 HAS_SANITY=0; HAS_AUTH=0; HAS_BIOME=0; HAS_TS=0; HAS_DEPLOY=0; HAS_CLAUDE=0
+HAS_HOSPITALITY=0
 
 [ -f "$TARGET/package.json" ] && HAS_PKG=1
 [ -f "$TARGET/pnpm-workspace.yaml" ] && HAS_MONOREPO=1
@@ -84,6 +85,7 @@ if [ "$HAS_PKG" = "1" ]; then
   printf '%s' "$PKG" | grep -Eq '"@sanity/|"sanity"[[:space:]]*:' && HAS_SANITY=1
   printf '%s' "$PKG" | grep -Eq '"next"[[:space:]]*:' && HAS_NEXT=1
   printf '%s' "$PKG" | grep -Eq '"typescript"[[:space:]]*:' && HAS_TS=1
+  printf '%s' "$PKG" | grep -Eiq 'hotel|resort|booking|hospitality|property|listing|realty|real[-_ ]?estate' && HAS_HOSPITALITY=1
 fi
 { [ -f "$TARGET/auth.ts" ] || [ -d "$TARGET/app/api/auth" ] || [ -d "$TARGET/src/app/api/auth" ]; } && HAS_AUTH=1
 { [ -f "$TARGET/Dockerfile" ] || ls "$TARGET"/docker-compose.* >/dev/null 2>&1 \
@@ -178,19 +180,16 @@ defaults=(1 1 0)
 prompt_category "Hooks"
 sel_hooks=(); [ ${#selected[@]} -gt 0 ] && sel_hooks=("${selected[@]}")
 
-# --- Skills ---
-names=(engineering:code-review engineering:debug engineering:documentation engineering:testing-strategy engineering:architecture engineering:system-design engineering:deploy-checklist engineering:incident-response engineering:tech-debt next-pro-seo brand-voice:brand-voice-enforcement design:design-critique)
-# install spec per skill (parallel to names)
-specs=(engineering:code-review engineering:debug engineering:documentation engineering:testing-strategy engineering:architecture engineering:system-design engineering:deploy-checklist engineering:incident-response engineering:tech-debt madushan/next-pro-seo brand-voice:brand-voice-enforcement design:design-critique)
-descs=("code review" "debugging" "tech writing" "test strategy" "ADRs" "system design" "deploy checklist" "incident response" "tech debt" "Next.js SEO/GEO" "brand voice" "design critique")
-defaults=(1 1 1 0 0 0 0 0 0 0 0 0)
-[ "$HAS_CLAUDE" = "0" ] && defaults[3]=1
-[ "$HAS_TURBO" = "1" ] && { defaults[4]=1; defaults[5]=1; }
-{ [ "$HAS_NEXT" = "1" ] || [ "$HAS_DEPLOY" = "1" ]; } && defaults[6]=1
-[ "$HAS_AUTH" = "1" ] && defaults[7]=1
-[ "$HAS_SANITY" = "1" ] && defaults[8]=1
-[ "$HAS_NEXT" = "1" ] && defaults[9]=1
-prompt_category "Skills (installed via bunx skills add)"
+# --- Skills (GitHub repos via `bunx skills add <repo> --skill <name>`) ---
+# Parallel arrays: names[] (display) / repos[] (github URL) / skillnames[] / descs[] / defaults[]
+names=(frontend-design      webapp-testing       next-pro-seo                              brand-guidelines     mcp-builder          skill-creator)
+repos=(https://github.com/anthropics/skills https://github.com/anthropics/skills https://github.com/madushan/next-pro-seo https://github.com/anthropics/skills https://github.com/anthropics/skills https://github.com/anthropics/skills)
+skillnames=(frontend-design webapp-testing       next-pro-seo                              brand-guidelines     mcp-builder          skill-creator)
+descs=("UI / component design" "web app testing" "Next.js SEO/GEO (your repo, needs gh auth)" "brand voice & guidelines" "build MCP servers" "author new skills")
+defaults=(0 1 0 0 0 0)
+[ "$HAS_NEXT" = "1" ] && { defaults[0]=1; defaults[2]=1; }
+[ "$HAS_HOSPITALITY" = "1" ] && defaults[3]=1
+prompt_category "Skills (bunx skills add <repo> --skill <name>)"
 sel_skills=(); [ ${#selected[@]} -gt 0 ] && sel_skills=("${selected[@]}")
 
 # --- CLAUDE.md ---
@@ -282,7 +281,7 @@ JSEOF
   fi
 fi
 
-# Skills
+# Skills (GitHub repos via the Vercel `skills` CLI: add <repo> --skill <name>)
 if [ ${#sel_skills[@]} -gt 0 ]; then
   RUNNER=""
   command -v bunx >/dev/null 2>&1 && RUNNER="bunx"
@@ -292,21 +291,20 @@ if [ ${#sel_skills[@]} -gt 0 ]; then
     sel_skills=()
   else
     installed_skills=()
-    # Re-map selected display names to install specs.
-    # (names[] and specs[] are the skills arrays still in scope.)
+    # Re-map selected display names to their repo URL + skill name.
+    # (names[]/repos[]/skillnames[] are the skills arrays still in scope.)
     for s_name in "${sel_skills[@]}"; do
-      spec="$s_name"
-      idx=0
+      repo=""; skn="$s_name"; idx=0
       for nm in "${names[@]}"; do
-        if [ "$nm" = "$s_name" ]; then spec="${specs[$idx]}"; break; fi
+        if [ "$nm" = "$s_name" ]; then repo="${repos[$idx]}"; skn="${skillnames[$idx]}"; break; fi
         idx=$((idx+1))
       done
-      printf "  installing skill: %s\n" "$spec"
-      if "$RUNNER" skills add "$spec" </dev/null; then
-        ok "skill: $spec"
-        installed_skills+=("$spec")
+      printf "  installing skill: %s --skill %s\n" "$repo" "$skn"
+      if ( cd "$TARGET" && "$RUNNER" skills add "$repo" --skill "$skn" -a claude-code -y </dev/null ); then
+        ok "skill: $skn"
+        installed_skills+=("$skn")
       else
-        skip "skill failed: $spec (continuing)"
+        skip "skill failed: $skn (private repos need 'gh auth' — continuing)"
       fi
     done
     sel_skills=(); [ ${#installed_skills[@]} -gt 0 ] && sel_skills=("${installed_skills[@]}")
@@ -340,12 +338,12 @@ cat > "$TARGET/.claude/.madushan-setup.json" <<EOF
 {
   "version": "$VERSION",
   "installedAt": "$TS_NOW",
-  "detectedStack": $(json_array "${detectedStack[@]}"),
+  "detectedStack": $(json_array ${detectedStack[@]+"${detectedStack[@]}"}),
   "installed": {
-    "agents": $(json_array "${sel_agents[@]}"),
-    "rules": $(json_array "${sel_rules[@]}"),
-    "hooks": $(json_array "${sel_hooks[@]}"),
-    "skills": $(json_array "${sel_skills[@]}"),
+    "agents": $(json_array ${sel_agents[@]+"${sel_agents[@]}"}),
+    "rules": $(json_array ${sel_rules[@]+"${sel_rules[@]}"}),
+    "hooks": $(json_array ${sel_hooks[@]+"${sel_hooks[@]}"}),
+    "skills": $(json_array ${sel_skills[@]+"${sel_skills[@]}"}),
     "claudeMd": $CLAUDEMD_BOOL
   }
 }
@@ -353,11 +351,11 @@ EOF
 ok "wrote .claude/.madushan-setup.json"
 
 head "Done"
-say "  Target:  $TARGET"
-say "  Agents:  ${sel_agents[*]:-(none)}"
-say "  Rules:   ${sel_rules[*]:-(none)}"
-say "  Hooks:   ${sel_hooks[*]:-(none)}"
-say "  Skills:  ${sel_skills[*]:-(none)}"
+say "  Target:   $TARGET"
+say "  Agents:   ${sel_agents[*]:-(none)}"
+say "  Rules:    ${sel_rules[*]:-(none)}"
+say "  Hooks:    ${sel_hooks[*]:-(none)}"
+say "  Skills:   ${sel_skills[*]:-(none)}"
 say "  CLAUDE.md: $CLAUDEMD_BOOL"
 say ""
 say "${YELLOW}Restart Claude Code${RESET} so the new agents, rules, and hooks are picked up."

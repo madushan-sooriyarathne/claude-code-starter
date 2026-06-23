@@ -71,12 +71,28 @@ Hooks read the tool-call JSON from stdin, **exit 0 to allow** and **exit 2 to bl
 (the stderr message is fed back to Claude). They are pure bash with an optional
 JSON parser (`python3`/`node`) and a fallback — no required dependencies.
 
-### Skills → installed via `bunx skills add`
+### Skills → installed via `bunx skills add … --skill …`
 
-`engineering:code-review`, `engineering:debug`, `engineering:documentation`
-(always), plus `testing-strategy`, `architecture`, `system-design`,
-`deploy-checklist`, `incident-response`, `tech-debt`, `next-pro-seo`, and two
-optional design/brand skills — each recommended from a matching scan signal. See
+All skills are installed with the Vercel `skills` CLI
+([vercel-labs/skills](https://github.com/vercel-labs/skills)) from a **GitHub repo URL
+plus a skill name** — no marketplace or plugin install:
+
+```bash
+bunx skills add <repo-url> --skill <skill-name> -a claude-code -y
+```
+
+| Skill | Repo | `--skill` | Default when |
+|-------|------|-----------|--------------|
+| frontend-design | `anthropics/skills` | `frontend-design` | Next.js |
+| webapp-testing | `anthropics/skills` | `webapp-testing` | always |
+| next-pro-seo | `madushan/next-pro-seo` | `next-pro-seo` | Next.js |
+| brand-guidelines | `anthropics/skills` | `brand-guidelines` | hospitality / real-estate |
+| mcp-builder | `anthropics/skills` | `mcp-builder` | opt-in |
+| skill-creator | `anthropics/skills` | `skill-creator` | opt-in |
+
+Add any repo whose skills live under `skills/<name>/SKILL.md` as a new row (use
+`bunx skills add <repo> --list` to discover names). Private repos (like
+`madushan/next-pro-seo`) need `gh auth` first; auth failures are non-fatal. See
 `skills/setup-claude/references/skills-catalog.md`.
 
 ### CLAUDE.md
@@ -101,8 +117,10 @@ timestamp, detected stack, and exactly what was installed in each category.
 
 ## Notes & conventions
 
-- **Skill installer:** standardized on `bunx skills add` (Bun-first stack). `npx
-  skills add` works identically if you prefer it.
+- **Skills are GitHub-only.** Every skill is installed with
+  `bunx skills add <repo-url> --skill <name> -a claude-code -y` (Bun-first stack; `npx
+  skills add` works the same). No Claude Code marketplace or `claude plugin install` is
+  used. Each catalog row is a repo URL + a `--skill` name; private repos need `gh auth`.
 - **`Write|Edit` matcher** (not `Write` alone) so `Edit` operations are also
   scanned and formatted.
 - `install.sh` finds its sources via `SCRIPT_DIR`; the slash command uses
