@@ -135,6 +135,13 @@ case "$EXTENSION" in
   rs)
     OUTPUT=$(cd "$ROOT" && cargo test 2>&1); EXIT=$?
     ;;
+  lua)
+    if command -v busted >/dev/null 2>&1; then
+      OUTPUT=$(cd "$ROOT" && busted "$REL_TEST" 2>&1); EXIT=$?
+    else
+      OUTPUT=$(cd "$ROOT" && lua "$REL_TEST" 2>&1); EXIT=$?
+    fi
+    ;;
   *)
     exit 0
     ;;

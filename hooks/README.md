@@ -4,7 +4,7 @@ Hook scripts are deterministic enforcement. Unlike rules (advisory), hooks **gua
 
 Hooks are wired in `settings.json` under the `"hooks"` key. Each hook specifies an event, a matcher, and a command to run. `timeout` values are in **seconds**.
 
-The four PreToolUse guards below are also packaged as the `safety-hooks` plugin (`/plugin install safety-hooks@dotclaude`) via `plugins/safety-hooks/hooks/hooks.json`, so you can get them without copying any files. `tests/` holds the fixture suite (`bash hooks/tests/run-all.sh`); it doesn't belong in a project's `.claude/hooks/`.
+The four PreToolUse guards below are also packaged as the `safety-hooks` plugin (`/plugin install safety-hooks@claude-code-starter`) via `plugins/safety-hooks/hooks/hooks.json`, so you can get them without copying any files. `tests/` holds the fixture suite (`bash hooks/tests/run-all.sh`); it doesn't belong in a project's `.claude/hooks/`.
 
 ## Available hooks
 
@@ -60,7 +60,7 @@ Injects dynamic project context at session start.
 
 **Default (minimal, ~5 to 10 tokens)**: current branch (or detached HEAD warning) and a `dirty` tag if there are uncommitted changes. That's it. No network calls, no extra detail.
 
-**Verbose**: set `DOTCLAUDE_SESSION_VERBOSE=1` in your shell to also emit:
+**Verbose**: set `CLAUDE_CODE_STARTER_SESSION_VERBOSE=1` in your shell to also emit:
 - Last commit oneline.
 - Uncommitted file count.
 - Staged indicator.
@@ -69,7 +69,7 @@ Injects dynamic project context at session start.
 
 The verbose payload runs ~30 to 90 tokens per session. Default is recommended for daily iterative work where every new conversation pays this cost.
 
-**Drift nudge**: if `.claude/.dotclaude.json` exists (written by `/setupdotclaude` at the end of setup), the hook hashes the project's manifests (`package.json` scripts, `pyproject.toml`, `Cargo.toml`, `go.mod`, `Gemfile`, `composer.json`, `Makefile`) and appends a one-line re-tune nudge only when the hash no longer matches. `DOTCLAUDE_FINGERPRINT=1 session-start.sh` prints the fingerprint JSON (how the skill writes the file); `DOTCLAUDE_META` overrides the fingerprint path (used by tests).
+**Drift nudge**: if `.claude/.claude-code-starter.json` exists (written by `/setup-claude` at the end of setup), the hook hashes the project's manifests (`package.json` scripts, `pyproject.toml`, `Cargo.toml`, `go.mod`, `Gemfile`, `composer.json`, `Makefile`) and appends a one-line re-tune nudge only when the hash no longer matches. `CLAUDE_CODE_STARTER_FINGERPRINT=1 session-start.sh` prints the fingerprint JSON (how the skill writes the file); `CLAUDE_CODE_STARTER_META` overrides the fingerprint path (used by tests).
 
 ### auto-test.sh
 **Event**: PostToolUse (`Edit` | `Write`)
@@ -79,7 +79,7 @@ Finds and runs the test file matching the edited source file (same-dir, `__tests
 ### notify.sh
 **Event**: Notification
 
-Sends a native OS notification when Claude needs your attention. Supports macOS (`osascript`), Linux (`notify-send`), and WSL (PowerShell toast). Extracts the actual message from the hook input when `jq` is available. Exits silently when no notifier exists. Set `DOTCLAUDE_NOTIFY_DRYRUN=1` to print instead of notify (used by the test fixtures).
+Sends a native OS notification when Claude needs your attention. Supports macOS (`osascript`), Linux (`notify-send`), and WSL (PowerShell toast). Extracts the actual message from the hook input when `jq` is available. Exits silently when no notifier exists. Set `CLAUDE_CODE_STARTER_NOTIFY_DRYRUN=1` to print instead of notify (used by the test fixtures).
 
 ## Adding your own
 
