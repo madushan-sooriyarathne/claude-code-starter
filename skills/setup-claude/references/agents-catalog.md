@@ -1,6 +1,6 @@
 # Agents Catalog
 
-Five review agents, copied from `${CLAUDE_PLUGIN_ROOT}/agents/` (slash command) or
+Eight review agents, copied from `${CLAUDE_PLUGIN_ROOT}/agents/` (slash command) or
 `$SCRIPT_DIR/agents/` (install.sh) into the target project's `.claude/agents/`.
 
 Pre-mark an agent as recommended when its **Recommend when** condition is met by the project scan.
@@ -12,8 +12,11 @@ Pre-mark an agent as recommended when its **Recommend when** condition is met by
 | 3 | `performance-reviewer` | `performance-reviewer.md` | Re-renders, N+1 queries, bundle size in Next.js + Drizzle | `next.config.*` OR `drizzle.config.*` detected |
 | 4 | `sanity-reviewer` | `sanity-reviewer.md` | Sanity schema changes, GROQ queries, content modeling | `sanity.config.*` detected |
 | 5 | `doc-reviewer` | `doc-reviewer.md` | Inline docs, README quality, CLAUDE.md completeness | Always |
+| 6 | `frontend-designer` | `frontend-designer.md` | Tokens-first UI design, avoids generic AI aesthetics, accessibility | Frontend files present (`.tsx`/`.jsx`/`.vue`/`.svelte`) |
+| 7 | `pr-test-analyzer` | `pr-test-analyzer.md` | Judges whether tests actually verify behavior — catches assertion-free tests, mock theater | A test suite/runner detected |
+| 8 | `silent-failure-hunter` | `silent-failure-hunter.md` | Finds swallowed errors, failures masked as success, error-hiding fallbacks | Always (any codebase with error handling) |
 
 Notes:
 
-- All five are safe to install regardless of stack; the conditions above only control which are **pre-checked** by default. The user may add or remove any.
+- All eight are safe to install regardless of stack; the conditions above only control which are **pre-checked** by default. The user may add or remove any.
 - Agents are invoked on demand inside a session (e.g. "use the security-reviewer agent"). They do not run automatically.
