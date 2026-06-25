@@ -1,6 +1,28 @@
 # Skills Catalog
 
-All skills are installed with the Vercel `skills` CLI
+## Bundled Skills
+
+These skills ship with this plugin and are **already available** — no install command
+needed. When selected in setup-claude, they are logged as "available (bundled)" in the
+summary. Surface them to the user so they know what they have.
+
+| #   | Skill            | Description                                                                                          | Recommend when                                                  |
+| --- | ---------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| B1  | `catchup`        | Rebuild working context fast after `/clear` or a fresh session; summarizes branch changes            | Always                                                          |
+| B2  | `debug-fix`      | Find and fix a bug. `--fast` flag for emergency hotfix mode                                          | Always                                                          |
+| B3  | `explain`        | One-sentence summary + mental model. `verbose` for ASCII diagram + modification guide                | Always                                                          |
+| B4  | `fix-issue`      | Take a GitHub issue number to tested fix, prep a closing PR                                          | `gh` + GitHub remote detected                                   |
+| B5  | `pr-review`      | Parallel specialist-agent review (quality, security, performance, silent failures, tests, docs)      | `gh` + GitHub remote detected                                   |
+| B6  | `refactor`       | Safe refactor with tests as safety net. `--diff` to simplify current diff before committing          | Always                                                          |
+| B7  | `ship`           | Scan changes → commit → push → create PR, with confirmation at each step                             | `gh` + GitHub remote detected                                   |
+| B8  | `tdd`            | TDD loop: failing test first → minimum code to pass → refactor → repeat                              | Test runner detected (`jest.config.*`, `vitest.config.*`, etc.) |
+| B9  | `test-writer`    | Write comprehensive tests for new or changed code                                                    | Test runner detected                                            |
+| B10 | `claude-md`      | Keep CLAUDE.md current and lean. `audit` to check for stale commands, drift, and bloat              | Always                                                          |
+| B11 | `context-budget` | Estimate per-turn token cost of `.claude/` and `CLAUDE.md`; flags over-budget contributors          | Always                                                          |
+
+## External Skills
+
+Installed with the Vercel `skills` CLI
 ([vercel-labs/skills](https://github.com/vercel-labs/skills)) from a **GitHub repo URL
 plus a skill name** — never via a Claude Code marketplace/plugin install. Each row
 below maps a display name to its repo and `--skill` argument.

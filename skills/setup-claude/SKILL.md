@@ -104,6 +104,13 @@ without it appearing in the approved plan first.
 Build a `detectedStack` list from the hits. Briefly tell the user what you
 detected (one or two lines) before starting the categories.
 
+Then ask one `AskUserQuestion` with two options:
+- **"Accept all recommended"** — read all 6 catalogs silently, apply every
+  "Recommend when" rule against the scan, build the full recommended selection
+  (bundled skills marked as already available, external skills queued for
+  install), and jump directly to Step 3's plan table. No per-category prompts.
+- **"Customize per category"** — proceed with the category-by-category flow below.
+
 ## Step 2 — Category-by-category selection
 
 Read the matching catalog before presenting each category, and pre-mark the
@@ -124,9 +131,16 @@ Go in this order, one turn each:
    persistent behavior rules into `CLAUDE.md` on install, so confirm before proceeding.
    Note scope differences: Caveman is project-scoped; Ponytail is user-scoped (installs
    to `~/.claude/`); Graphify is a system tool that writes to the project `CLAUDE.md`.
-5. **Skills** — read `references/skills-catalog.md`. Each skill is a GitHub repo URL
-   plus a skill name, installed with `bunx skills add <repo> --skill <name>`. Present
-   the recommended set (pre-marked from the scan); the user picks which to install.
+5. **Skills** — read `references/skills-catalog.md`. Present in two groups:
+   - **Bundled skills** (already included with this plugin — no install needed): scan
+     `${CLAUDE_PLUGIN_ROOT}/skills/` for subdirectory names, exclude `setup-claude`
+     itself. Show each bundled skill with its one-line description and pre-mark per
+     the **Recommend when** column in the catalog's "Bundled Skills" section. Selected
+     bundled skills are logged as "already available" — no action required at install.
+   - **Additional skills** (installed from GitHub via `bunx skills add`): read the
+     catalog's "External Skills" section. Pre-mark recommendations from the scan.
+     Each selected skill runs `bunx skills add <repo-url> --skill <skill-name> -a claude-code -y`
+     at install time.
 6. **CLAUDE.md template** — ask once whether to copy the template to `./CLAUDE.md`.
    If `CLAUDE.md` already exists, ask whether to overwrite (default: keep
    existing, skip).
@@ -203,11 +217,14 @@ Apply the approved plan exactly:
     `graphify-out/` so teammates share the graph.
   Treat all third-party plugin install failures as non-fatal — log the failure, skip
   that plugin, and continue.
-- **Skills:** for each selected skill, run
-  `bunx skills add <repo-url> --skill <skill-name> -a claude-code -y` from the project
-  directory (the repo URL and skill name come from the catalog). Private repos (e.g.
-  `madushan/next-pro-seo`) need `gh auth` — treat an auth failure as non-fatal and
-  continue. There is no marketplace/plugin install step.
+- **Skills:** handle the two groups separately:
+  - **Bundled skills:** no action required — they are already available via the plugin.
+    Log each selected bundled skill as "available (bundled)" in the Step 6 summary.
+  - **External skills:** for each selected external skill, run
+    `bunx skills add <repo-url> --skill <skill-name> -a claude-code -y` from the
+    project directory (repo URL and skill name from the catalog). Private repos (e.g.
+    `madushan/next-pro-seo`) need `gh auth` — treat an auth failure as non-fatal and
+    continue. There is no marketplace/plugin install step.
 - **CLAUDE.md:** if selected, copy `${CLAUDE_PLUGIN_ROOT}/template/CLAUDE.md`
   → `./CLAUDE.md`. Then run the budget check: `grep -cv '^[[:space:]]*$' CLAUDE.md`.
   - Under 25 non-blank lines: pass, no message needed.
