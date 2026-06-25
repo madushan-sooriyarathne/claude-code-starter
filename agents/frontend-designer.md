@@ -1,6 +1,7 @@
 ---
 name: frontend-designer
 description: Use when building or restyling any web UI — pages, dashboards, components. Designs tokens-first with a deliberate design principle, avoids generic AI aesthetics, enforces accessibility. States its plan before writing files.
+color: purple
 tools:
   - Read
   - Write
