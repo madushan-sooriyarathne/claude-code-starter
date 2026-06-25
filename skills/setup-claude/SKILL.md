@@ -119,10 +119,15 @@ Go in this order, one turn each:
    `protect-files`, `warn-large-files`); pre-mark `format-on-save` when Biome is
    detected, `typecheck-on-stop`/`lint-on-stop` when a type-checker/linter is
    detected, `session-start` by default (cheap).
-4. **Skills** — read `references/skills-catalog.md`. Each skill is a GitHub repo URL
+4. **Third-party plugins** — read `references/third-party-plugins-catalog.md`. Present
+   all three (Caveman, Ponytail, Graphify) **pre-marked by default**. These inject
+   persistent behavior rules into `CLAUDE.md` on install, so confirm before proceeding.
+   Note scope differences: Caveman is project-scoped; Ponytail is user-scoped (installs
+   to `~/.claude/`); Graphify is a system tool that writes to the project `CLAUDE.md`.
+5. **Skills** — read `references/skills-catalog.md`. Each skill is a GitHub repo URL
    plus a skill name, installed with `bunx skills add <repo> --skill <name>`. Present
    the recommended set (pre-marked from the scan); the user picks which to install.
-5. **CLAUDE.md template** — ask once whether to copy the template to `./CLAUDE.md`.
+6. **CLAUDE.md template** — ask once whether to copy the template to `./CLAUDE.md`.
    If `CLAUDE.md` already exists, ask whether to overwrite (default: keep
    existing, skip).
 
@@ -140,6 +145,8 @@ gap-analysis mode, everything flagged for removal):
 | `security.md` (rule) | install | `src/auth/`, `src/middleware/` found | path-scoped |
 | `testing.md` (rule) | install | `vitest.config.ts` + `*.test.ts` found | always-loaded (no `paths:`) |
 | `block-dangerous-commands` (hook) | install | always-on safety | hook — no context cost |
+| `caveman` (plugin) | install | default selected; user confirmed | CLAUDE.md snippet |
+| `graphify` (plugin) | skip | `uv`/`pipx` not found on PATH | — |
 | `pr-review` (skill) | skip | no GitHub remote / `gh` not installed | — |
 | `old-custom-rule.md` (rule) | remove | no longer justified by scan; not in approved selection | — |
 
@@ -174,6 +181,28 @@ Apply the approved plan exactly:
   project (real script names from the manifest read in Step 1, real `gh`
   subcommands only if a GitHub remote + `gh` were detected) — never paste in a
   generic allow-list wholesale.
+- **Third-party plugins:** read `references/third-party-plugins-catalog.md` for exact
+  install sequences. Apply in this order for each selected plugin:
+  - **Caveman:** run `bunx skills add JuliusBrussee/caveman -a claude-code -y` from the
+    project directory (project-scoped). Then append the caveman CLAUDE.md snippet from
+    the catalog.
+  - **Ponytail:** Ponytail uses the Claude Code native plugin system and installs to
+    `~/.claude/` (user-scoped, not project-scoped). Print the two in-session commands
+    for the user to run manually:
+    ```
+    /plugin marketplace add DietrichGebert/ponytail
+    /plugin install ponytail@ponytail
+    ```
+    Tell the user to restart Claude Code after running them. Then append the ponytail
+    CLAUDE.md snippet from the catalog.
+  - **Graphify:** first verify `uv` or `pipx` is on PATH (`which uv || which pipx`); if
+    neither found, warn and skip with a note to install `uv` first. Otherwise run the
+    full install sequence from the catalog (`uv tool install graphifyy`,
+    `graphify claude install`, `graphify build`, optionally `graphify hook install`).
+    Append the graph-report CLAUDE.md snippet from the catalog. Tell the user to commit
+    `graphify-out/` so teammates share the graph.
+  Treat all third-party plugin install failures as non-fatal — log the failure, skip
+  that plugin, and continue.
 - **Skills:** for each selected skill, run
   `bunx skills add <repo-url> --skill <skill-name> -a claude-code -y` from the project
   directory (the repo URL and skill name come from the catalog). Private repos (e.g.
