@@ -1,0 +1,5 @@
+{
+  "name": "Unrelated hook event exits silently",
+  "stdin": { "hook_event_name": "Notification", "session_id": "tc-other" },
+  "expect_exit": 0
+}

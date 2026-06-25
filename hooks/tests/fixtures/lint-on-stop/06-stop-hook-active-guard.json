@@ -1,0 +1,5 @@
+{
+  "name": "Stop with stop_hook_active true exits silently to avoid an infinite loop",
+  "stdin": { "hook_event_name": "Stop", "session_id": "lint-loop-guard", "stop_hook_active": true },
+  "expect_exit": 0
+}

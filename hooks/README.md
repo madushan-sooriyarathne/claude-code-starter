@@ -76,6 +76,26 @@ The verbose payload runs ~30 to 90 tokens per session. Default is recommended fo
 
 Finds and runs the test file matching the edited source file (same-dir, `__tests__/`, or parallel `tests/` conventions; vitest/jest/mocha, pytest/unittest, `go test`, `cargo test`). Silent on success — passing tests contribute zero tokens. Only emits output when tests fail. Skips test files themselves, config files, and non-code extensions.
 
+### typecheck-on-stop.sh
+**Event**: PostToolUse (`Edit` | `Write`) + Stop
+
+Runs the project's type-check once Claude finishes its whole turn — not after every single file edit. `PostToolUse` just marks the session dirty (cheap); `Stop` checks the marker, runs the check, clears it. Silent on success; on failure exits 2 so Claude sees the errors and keeps working instead of stopping. Guards against `stop_hook_active` to avoid retriggering itself in a loop.
+
+- JS/TS: runs the `typecheck` or `check-types` script from `package.json`, via the detected package manager (`bun`/`pnpm`/`yarn`/`npm`, by lockfile).
+- Go: `go vet ./...` (Go has no separate type-check command).
+- Rust: `cargo check`.
+- No matching manifest or script: skips silently.
+
+### lint-on-stop.sh
+**Event**: PostToolUse (`Edit` | `Write`) + Stop
+
+Same dirty-marker/Stop pattern as `typecheck-on-stop.sh`, for linting.
+
+- JS/TS: runs the `lint` script from `package.json`, via the detected package manager.
+- Go: `golangci-lint run` if installed (no fallback — `go vet` is already covered by `typecheck-on-stop.sh`).
+- Rust: `cargo clippy --all-targets` if installed.
+- No matching manifest, script, or linter binary: skips silently.
+
 ### notify.sh
 **Event**: Notification
 

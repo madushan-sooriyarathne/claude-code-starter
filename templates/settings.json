@@ -92,6 +92,37 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/auto-test.sh",
             "timeout": 120,
             "statusMessage": "Running matching tests..."
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/typecheck-on-stop.sh",
+            "timeout": 10,
+            "statusMessage": "Marking session dirty for type-check..."
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/lint-on-stop.sh",
+            "timeout": 10,
+            "statusMessage": "Marking session dirty for lint..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/typecheck-on-stop.sh",
+            "timeout": 120,
+            "statusMessage": "Type-checking changed code..."
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/lint-on-stop.sh",
+            "timeout": 120,
+            "statusMessage": "Linting changed code..."
           }
         ]
       }

@@ -1,0 +1,5 @@
+{
+  "name": "PostToolUse on a source file exits silently and marks the session dirty",
+  "stdin": { "hook_event_name": "PostToolUse", "session_id": "tc-1", "tool_input": { "file_path": "src/app.ts" } },
+  "expect_exit": 0
+}

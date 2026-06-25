@@ -1,0 +1,6 @@
+{
+  "name": "Stop with marker set runs silently when no package.json/go.mod/Cargo.toml is found (this repo has none)",
+  "stdin": { "hook_event_name": "Stop", "session_id": "lint-1", "stop_hook_active": false },
+  "expect_exit": 0,
+  "expect_stdout_not_contains": ["lint-on-stop"]
+}

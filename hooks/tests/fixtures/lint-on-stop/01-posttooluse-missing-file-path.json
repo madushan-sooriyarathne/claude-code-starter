@@ -1,0 +1,5 @@
+{
+  "name": "PostToolUse with no file_path exits silently",
+  "stdin": { "hook_event_name": "PostToolUse", "session_id": "lint-1", "tool_input": {} },
+  "expect_exit": 0
+}

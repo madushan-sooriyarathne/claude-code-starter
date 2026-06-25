@@ -1,0 +1,5 @@
+{
+  "name": "PostToolUse on a doc file exits silently and does not mark dirty",
+  "stdin": { "hook_event_name": "PostToolUse", "session_id": "tc-skip", "tool_input": { "file_path": "README.md" } },
+  "expect_exit": 0
+}

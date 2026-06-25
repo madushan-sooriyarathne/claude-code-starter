@@ -1,0 +1,6 @@
+{
+  "name": "Stop with no marker (doc-only edit never marked dirty) exits silently",
+  "stdin": { "hook_event_name": "Stop", "session_id": "lint-skip", "stop_hook_active": false },
+  "expect_exit": 0,
+  "expect_stdout_not_contains": ["lint-on-stop"]
+}
