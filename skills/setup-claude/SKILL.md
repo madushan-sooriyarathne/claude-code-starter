@@ -11,7 +11,7 @@ description: >
   Next.js / Turborepo / Hono+Bun / Drizzle / BetterAuth / Sanity / Biome stack
   where present.
 metadata:
-  version: "0.2.0"
+  version: "0.4.0"
 ---
 
 # /setup-claude
@@ -101,17 +101,76 @@ signal removed, file hand-deleted from upstream, etc.) as a candidate for
 **removal** in the Step 3 plan table. Never delete or overwrite an existing file
 without it appearing in the approved plan first.
 
-Build a `detectedStack` list from the hits. Briefly tell the user what you
-detected (one or two lines) before starting the categories.
+Build a `detectedStack` list from the hits.
 
-Then ask one `AskUserQuestion` with two options:
-- **"Accept all recommended"** — read all 6 catalogs silently, apply every
-  "Recommend when" rule against the scan, build the full recommended selection
+## Step 1.5 — Confirm the detected stack
+
+Before any selection, render a labeled summary of `detectedStack` so the user
+can sanity-check what was found. **Evidence-driven, not assumed:** emit a row
+only for a category that has a real signal; mark `—` for one that was looked for
+but not found; omit categories that never apply. Append a `Packages` list when a
+monorepo was detected.
+
+```
+Stack
+  Frontend:   Next.js 15 (React, Tailwind v4, TS)
+  Backend:    Hono + Bun
+  Database:   Drizzle + PostgreSQL
+  Auth:       BetterAuth + Google
+  Realtime:   Soketi (Pusher-compat)
+  Testing:    bun:test (game-engine)
+  Formatter:  Prettier (printWidth 100)
+  Typecheck:  tsc (no ESLint/Biome)
+  Pkg mgr:    pnpm workspaces
+  Git:        <default-branch>, gh <installed?/remote?>
+  CI:         <detected workflow / —>
+Packages
+  apps/web              Next.js frontend
+  apps/api              Hono + Bun backend
+  packages/db           Drizzle schema + migrations
+  packages/types        Zod schemas (single source of truth)
+  packages/game-engine  Pure game logic + bun:test
+  packages/ui           Shared React components
+```
+
+(The values above are an example; fill in only what the scan actually found.)
+
+Then ask one `AskUserQuestion`: **Accept** / **Correct it**. On *Correct it*,
+take the user's edits, patch `detectedStack`, re-render the summary, and re-ask
+until accepted. Do not proceed until the stack is confirmed.
+
+## Step 1.6 — Pick install tier
+
+Once the stack is accepted, offer how to install. Ask one `AskUserQuestion`
+with four options, each stating what's in and out:
+
+- **Minimal** — CLAUDE.md template + the four safety hooks only
+  (`block-dangerous-commands`, `scan-secrets`, `protect-files`,
+  `warn-large-files`). Excludes all agents, rules, additional skills, and
+  third-party plugins.
+- **Standard (Recommended)** — read all 6 catalogs silently, apply every
+  "Recommend when" rule against the scan, and build the recommended selection
   (bundled skills marked as already available, external skills queued for
-  install), and jump directly to Step 3's plan table. No per-category prompts.
-- **"Customize per category"** — proceed with the category-by-category flow below.
+  install). Excludes catalog items with no supporting evidence.
+- **Full** — every item in all 6 catalogs plus all three third-party plugins.
+  Excludes nothing.
+- **Let me check** — the category-by-category flow in Step 2.
+
+**One-shot tiers (Minimal / Standard / Full):** build the selection silently
+from the catalogs, skip all per-category prompts, and go straight to Step 3's
+plan table. Render the table (the contract still holds), then install without
+further questions **except** when one of these fires — only then stop and ask:
+- a required system dep is missing (`uv`/`pipx` for Graphify, `bunx` for
+  skills, `gh auth` for a private skill repo), or
+- a crucial/destructive action is pending (overwriting an existing
+  `CLAUDE.md`, or overwriting/removing existing files in gap-analysis mode).
+Otherwise apply the whole plan and report at Step 6.
+
+**Let me check** → proceed to Step 2.
 
 ## Step 2 — Category-by-category selection
+
+(Only reached from the **Let me check** tier.)
 
 Read the matching catalog before presenting each category, and pre-mark the
 recommended items per its **Recommend when** column against the scan.
@@ -168,9 +227,12 @@ Cost class: `invoked-only` for agents/skills, `path-scoped` for rules with
 `paths:` frontmatter, `always-loaded` for rules without it, `hook` for hooks
 (zero per-turn context cost, registered in `settings.json`).
 
-Ask one `AskUserQuestion`: **approve the plan** / **adjust** (loop back to
-Step 2) / **cancel**. Do not proceed to Step 4 without approval. This table is
-the contract — Step 4 installs and removes exactly what it lists.
+For the **Let me check** tier, ask one `AskUserQuestion`: **approve the plan** /
+**adjust** (loop back to Step 2) / **cancel**. Do not proceed to Step 4 without
+approval. For one-shot tiers (Minimal / Standard / Full), still render this
+table, but auto-approve and proceed — interrupt only on the missing-dep or
+crucial/destructive flags listed in Step 1.6. This table is the contract —
+Step 4 installs and removes exactly what it lists.
 
 ## Step 4 — Install
 
@@ -209,12 +271,13 @@ Apply the approved plan exactly:
     ```
     Tell the user to restart Claude Code after running them. Then append the ponytail
     CLAUDE.md snippet from the catalog.
-  - **Graphify:** first verify `uv` or `pipx` is on PATH (`which uv || which pipx`); if
-    neither found, warn and skip with a note to install `uv` first. Otherwise run the
-    full install sequence from the catalog (`uv tool install graphifyy`,
-    `graphify claude install`, `graphify build`, optionally `graphify hook install`).
-    Append the graph-report CLAUDE.md snippet from the catalog. Tell the user to commit
-    `graphify-out/` so teammates share the graph.
+  - **Graphify:** detect a Python package manager by priority `uv` → `pipx` → `pip`
+    (`uv tool install graphifyy`, else `pipx install graphifyy`, else
+    `pip install graphifyy`). If none is on PATH, warn and skip with a note to install
+    `uv` first (`curl -LsSf https://astral.sh/uv/install.sh | sh`). After install run
+    `graphify install --project`, append the graph-report CLAUDE.md snippet from the
+    catalog, then tell the user to run `/graphify .` in Claude Code to build the graph
+    and to commit `graphify-out/` so teammates share it.
   Treat all third-party plugin install failures as non-fatal — log the failure, skip
   that plugin, and continue.
 - **Skills:** handle the two groups separately:

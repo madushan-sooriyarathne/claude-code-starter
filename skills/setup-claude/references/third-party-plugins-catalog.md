@@ -62,29 +62,28 @@ Then restart Claude Code.
 | Field         | Value |
 |---------------|-------|
 | Repo          | `https://github.com/safishamsi/graphify` |
-| Install cmd   | `uv tool install graphifyy` (system-level) then `graphify claude install` (project CLAUDE.md) |
+| Install cmd   | `uv tool install graphifyy` (system-level) then `graphify install --project` |
 | Scope         | System tool + project CLAUDE.md config |
 | Default       | ✅ pre-selected |
-| Prerequisite  | Python 3.10+ and `uv` or `pipx` on PATH |
+| Prerequisite  | Python 3.10+ and `uv`, `pipx`, or `pip` on PATH |
 
 **Install sequence (run from project directory):**
 
 ```bash
-# 1. Install the system tool (skip if already installed)
-uv tool install graphifyy || pipx install graphifyy
+# 1. Install the system tool by package-manager priority (uv puts it on PATH automatically)
+uv tool install graphifyy      # preferred
+# else: pipx install graphifyy
+# else: pip install graphifyy   # may need manual PATH setup
 
-# 2. Register with Claude Code (writes graphify instructions to CLAUDE.md)
-graphify claude install
-
-# 3. Build initial knowledge graph
-graphify build
-
-# 4. (Optional) Install auto-rebuild git hook
-graphify hook install
+# 2. Register with Claude Code for this project
+graphify install --project
 ```
 
-**Post-install — `graphify claude install` writes to `CLAUDE.md` automatically.**
-Additionally append this rule to `CLAUDE.md` after the graphify block:
+Then tell the user to run `/graphify .` in a Claude Code session to build the
+initial knowledge graph. If none of `uv`/`pipx`/`pip` is on PATH, warn and skip
+with a note to install `uv` first (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+
+**Post-install — append this rule to `CLAUDE.md`:**
 
 ```markdown
 # Codebase graph
@@ -93,7 +92,6 @@ for god nodes and community structure. Use it to locate high-impact files before
 ```
 
 **Team setup note:** commit `graphify-out/` so teammates get the graph immediately.
-Tell the user to run `graphify hook install` on each machine.
 
 ---
 
@@ -105,6 +103,7 @@ Tell the user to run `graphify hook install` on each machine.
    action — print the two `/plugin` commands and tell the user to run them, then
    continue with the rest of setup.
 4. Check for prerequisites before running:
-   - Graphify: verify `uv` or `pipx` is on PATH; if neither found, warn and skip with
-     a note to install `uv` first (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+   - Graphify: verify `uv`, `pipx`, or `pip` is on PATH (priority order: `uv` → `pipx`
+     → `pip`); if none found, warn and skip with a note to install `uv` first
+     (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
 5. After all selected plugins are processed, continue to the Skills step.

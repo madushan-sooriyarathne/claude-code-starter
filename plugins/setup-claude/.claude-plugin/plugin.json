@@ -1,7 +1,7 @@
 {
 	"$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
 	"name": "setup-claude",
-	"version": "2.1.0",
+	"version": "2.3.0",
 	"description": "Set up claude-code-starter in any project. Deep-scans the codebase, interviews you, then installs and customizes only the config the project actually needs.",
 	"author": {
 		"name": "Madushan Sooriyarathne",

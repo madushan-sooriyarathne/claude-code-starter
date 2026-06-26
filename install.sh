@@ -14,7 +14,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="0.2.0"
+VERSION="0.3.0"
 
 # ---- pretty output -------------------------------------------------------
 if [ -t 1 ]; then
@@ -182,23 +182,80 @@ detectedStack=()
 [ "$HAS_PHP" = "1" ]      && detectedStack+=("php")
 [ "$HAS_JAVA" = "1" ]     && detectedStack+=("java")
 
-head "Scan results"
-if [ ${#detectedStack[@]} -gt 0 ]; then
-  say "  Detected: ${detectedStack[*]}"
-else
-  say "  No known stack markers found — defaults will be conservative."
-fi
+# ---- labeled stack summary (mirrors skill Step 1.5) ----
+row() { # row "Label" "value" ; prints only when value non-empty, else dim "—"
+  if [ -n "$2" ]; then printf "  %-11s %s\n" "$1" "$2"
+  else printf "  %-11s %s—%s\n" "$1" "$DIM" "$RESET"; fi
+}
+fe=""; [ "$HAS_NEXT" = "1" ] && fe="Next.js"; [ "$HAS_REACT" = "1" ] && fe="${fe:+$fe + }React"
+[ "$HAS_TAILWIND" = "1" ] && fe="${fe:+$fe + }Tailwind"; { [ -z "$fe" ] && [ "$HAS_FRONTEND" = "1" ]; } && fe="(frontend dirs)"
+be=""; [ "$HAS_HONO" = "1" ] && be="Hono"; [ "$HAS_BUN" = "1" ] && be="${be:+$be + }Bun"
+{ [ -z "$be" ] && [ "$HAS_BACKEND" = "1" ]; } && be="(backend dirs)"
+db=""; [ "$HAS_DRIZZLE" = "1" ] && db="Drizzle"; { [ -z "$db" ] && [ "$HAS_DB" = "1" ]; } && db="(migrations/ORM)"
+au=""; [ "$HAS_AUTH" = "1" ] && au="BetterAuth/auth"
+ts=""; [ "$HAS_TESTS" = "1" ] && ts="present"
+fmt=""; [ "$HAS_BIOME" = "1" ] && fmt="Biome"; { [ -z "$fmt" ] && [ "$HAS_LINTER" = "1" ]; } && fmt="ESLint/Prettier"
+tc=""; [ "$HAS_TS" = "1" ] && tc="tsc"
+pm=""; [ "$HAS_BUN" = "1" ] && pm="bun"; [ "$HAS_MONOREPO" = "1" ] && pm="${pm:+$pm }(monorepo)"
+[ "$HAS_PKG" = "1" ] && [ -z "$pm" ] && pm="npm/node"
+[ "$HAS_GO" = "1" ] && pm="go modules"; [ "$HAS_PY" = "1" ] && pm="${pm:-pip/uv}"
+[ "$HAS_RUST" = "1" ] && pm="cargo"
+gb="$(git -C "$TARGET" symbolic-ref --short HEAD 2>/dev/null || printf '')"
+gh_s=""; command -v gh >/dev/null 2>&1 && gh_s="gh ✓"; [ "$HAS_GH_REMOTE" = "1" ] && gh_s="${gh_s:+$gh_s, }github remote"
+git_s="${gb:+$gb}${gh_s:+${gb:+, }$gh_s}"
+ci=""; [ "$HAS_CI" = "1" ] && ci="detected"
+
+head "Detected stack"
+row "Frontend:" "$fe"; row "Backend:" "$be"; row "Database:" "$db"; row "Auth:" "$au"
+row "Testing:" "$ts"; row "Formatter:" "$fmt"; row "Typecheck:" "$tc"; row "Pkg mgr:" "$pm"
+row "Git:" "$git_s"; row "CI:" "$ci"
 [ "$HAS_CLAUDE" = "1" ] && say "  ${YELLOW}Existing .claude/ found — gap-analysis mode (missing items offered, stale ones flagged for removal).${RESET}"
 
+# Empty project → minimal baseline, no further questions.
 if [ ${#detectedStack[@]} -eq 0 ] && [ "$HAS_PKG" != "1" ] && ! has_any '*.go' && ! has_any '*.py' && ! has_any '*.rb'; then
   say "  ${YELLOW}No source files or manifests found.${RESET} Installing minimal baseline only (CLAUDE.md + safety hooks)."
   sel_agents=(); sel_rules=(); sel_hooks=(block-dangerous-commands scan-secrets protect-files warn-large-files)
-  sel_skills=(); WANT_CLAUDEMD=1
+  sel_skills=(); sel_plugins=(); WANT_CLAUDEMD=1
   EXIST_AGENTS=(); EXIST_RULES=(); EXIST_HOOKS=()
   REMOVE_AGENTS=(); REMOVE_RULES=(); REMOVE_HOOKS=()
-  MINIMAL_BASELINE=1
+  MINIMAL_BASELINE=1; TIER="minimal"
 else
   MINIMAL_BASELINE=0
+  # ---- Step 1.5 — confirm stack ----
+  TIER=""
+  if [ "$INTERACTIVE" = "1" ]; then
+    printf "\nLooks right? [Y]es / [e]dit (correct via per-item toggles): "
+    ask_line
+    case "$REPLY_LINE" in e|E|edit|EDIT|n|N|no|NO) TIER="letmecheck"; say "  ${DIM}OK — use the per-item toggles below to correct.${RESET}" ;; esac
+  fi
+  # ---- Step 1.6 — pick install tier (skip if edit forced letmecheck) ----
+  if [ -z "$TIER" ]; then
+    head "Install tier"
+    say "  1) Minimal   — CLAUDE.md + 4 safety hooks only"
+    say "  2) Standard  — recommended picks from the scan ${DIM}(default)${RESET}"
+    say "  3) Full      — everything in every category + all 3 plugins"
+    say "  4) Let me check — choose each category by hand"
+    printf "> "
+    ask_line
+    case "$REPLY_LINE" in
+      1|minimal)            TIER="minimal" ;;
+      ""|2|standard)        TIER="standard" ;;
+      3|full)               TIER="full" ;;
+      4|check|"let me check") TIER="letmecheck" ;;
+      *)                    TIER="standard"; say "  ${DIM}Unrecognized — using Standard.${RESET}" ;;
+    esac
+  fi
+  if [ "$TIER" = "minimal" ]; then
+    sel_agents=(); sel_rules=(); sel_hooks=(block-dangerous-commands scan-secrets protect-files warn-large-files)
+    sel_skills=(); sel_plugins=()
+    WANT_CLAUDEMD=1
+    [ -f "$TARGET/CLAUDE.md" ] && WANT_CLAUDEMD=0  # crucial: don't overwrite existing without asking
+    if [ -f "$TARGET/CLAUDE.md" ] && [ "$INTERACTIVE" = "1" ]; then
+      printf "  CLAUDE.md exists. Overwrite with template? [y/N]: "; ask_line
+      case "$REPLY_LINE" in y|Y|yes|YES) WANT_CLAUDEMD=1 ;; esac
+    fi
+    MINIMAL_BASELINE=1
+  fi
 fi
 
 # Existing managed files on disk (for gap-analysis removal diffing).
@@ -216,6 +273,15 @@ fi
 # ========================================================================
 prompt_category() {
   local title="$1"; local n=${#names[@]}; local i
+  # One-shot tiers: select without prompting.
+  if [ "${TIER:-}" = "standard" ]; then
+    selected=(); for ((i=0; i<n; i++)); do [ "${defaults[$i]}" = "1" ] && selected+=("${names[$i]}"); done
+    return
+  fi
+  if [ "${TIER:-}" = "full" ]; then
+    selected=("${names[@]}")
+    return
+  fi
   head "$title"
   for ((i=0; i<n; i++)); do
     local mark=" "; [ "${defaults[$i]}" = "1" ] && mark="x"
@@ -300,6 +366,13 @@ select_all() {
   prompt_category "Hooks"
   sel_hooks=(); [ ${#selected[@]} -gt 0 ] && sel_hooks=("${selected[@]}")
 
+  # --- Third-party plugins (behavior plugins; all pre-marked) ---
+  names=(caveman ponytail graphify)
+  descs=("ultra-compressed replies (bunx)" "lazy/YAGNI mode (claude plugin)" "codebase knowledge graph (uv/pipx/pip)")
+  defaults=(1 1 1)
+  prompt_category "Third-party plugins"
+  sel_plugins=(); [ ${#selected[@]} -gt 0 ] && sel_plugins=("${selected[@]}")
+
   # --- Skills (GitHub repos via `bunx skills add <repo> --skill <name>`) ---
   # Parallel arrays: names[] (display) / repos[] (github URL) / skillnames[] / descs[] / defaults[]
   names=(frontend-design      webapp-testing       next-pro-seo                              brand-guidelines     mcp-builder          skill-creator)
@@ -318,9 +391,12 @@ select_all() {
   head "CLAUDE.md template"
   WANT_CLAUDEMD=0
   if [ -f "$TARGET/CLAUDE.md" ]; then
+    # Crucial action — always confirm an overwrite, even in one-shot tiers.
     printf "  CLAUDE.md already exists. Overwrite with the template? [y/N]: "
     ask_line
     case "$REPLY_LINE" in y|Y|yes|YES) WANT_CLAUDEMD=1 ;; *) WANT_CLAUDEMD=0 ;; esac
+  elif [ "$TIER" = "standard" ] || [ "$TIER" = "full" ]; then
+    WANT_CLAUDEMD=1; say "  Copy CLAUDE.md template ${DIM}(auto: $TIER tier)${RESET}"
   else
     printf "  Copy the CLAUDE.md template to the project root? [Y/n]: "
     ask_line
@@ -340,6 +416,7 @@ print_plan() {
   say "  Install agents:  ${sel_agents[*]:-(none)}"
   say "  Install rules:   ${sel_rules[*]:-(none)}"
   say "  Install hooks:   ${sel_hooks[*]:-(none)}"
+  say "  Install plugins: ${sel_plugins[*]:-(none)}"
   say "  Install skills:  ${sel_skills[*]:-(none)}"
   say "  CLAUDE.md:       $([ "$WANT_CLAUDEMD" = "1" ] && echo "install/overwrite" || echo "skip")"
   if [ ${#REMOVE_AGENTS[@]} -gt 0 ] || [ ${#REMOVE_RULES[@]} -gt 0 ] || [ ${#REMOVE_HOOKS[@]} -gt 0 ]; then
@@ -350,7 +427,17 @@ print_plan() {
   fi
 }
 
-if [ "$MINIMAL_BASELINE" != "1" ]; then
+if [ "$MINIMAL_BASELINE" = "1" ]; then
+  REMOVE_AGENTS=(); REMOVE_RULES=(); REMOVE_HOOKS=()
+  sel_plugins=()
+  print_plan
+elif [ "$TIER" = "standard" ] || [ "$TIER" = "full" ]; then
+  # One-shot tiers: build selection silently, render the plan, auto-proceed.
+  select_all
+  print_plan
+  say "  ${DIM}($TIER tier — auto-approved)${RESET}"
+else
+  # Let me check: interactive, with approve/adjust loop.
   while true; do
     select_all
     print_plan
@@ -363,8 +450,6 @@ if [ "$MINIMAL_BASELINE" != "1" ]; then
       *) say "  Unrecognized, treating as approve."; break ;;
     esac
   done
-else
-  REMOVE_AGENTS=(); REMOVE_RULES=(); REMOVE_HOOKS=()
 fi
 
 # ========================================================================
@@ -531,6 +616,63 @@ if [ "$WANT_CLAUDEMD" = "1" ]; then
 fi
 
 # ========================================================================
+# Third-party plugins (caveman / ponytail / graphify). All non-fatal.
+# ========================================================================
+append_claudemd() { # append_claudemd "<markdown block>" — creates CLAUDE.md if absent
+  printf '\n%s\n' "$1" >> "$TARGET/CLAUDE.md"
+}
+if [ ${#sel_plugins[@]} -gt 0 ]; then
+  head "Third-party plugins"
+  PRUNNER=""
+  command -v bunx >/dev/null 2>&1 && PRUNNER="bunx"
+  [ -z "$PRUNNER" ] && command -v npx >/dev/null 2>&1 && PRUNNER="npx"
+
+  for p in "${sel_plugins[@]}"; do
+    case "$p" in
+      caveman)
+        if [ -z "$PRUNNER" ]; then skip "caveman: bunx/npx not found — skipped"; continue; fi
+        if ( cd "$TARGET" && "$PRUNNER" skills add JuliusBrussee/caveman -a claude-code -y </dev/null ); then
+          append_claudemd "# Communication style
+Use caveman mode for all responses: drop articles, drop filler words, fragments OK.
+Activate with \`/caveman\` at session start (or load via skill)."
+          ok "plugin: caveman"
+        else skip "caveman: install failed — continuing"; fi ;;
+      ponytail)
+        if command -v claude >/dev/null 2>&1; then
+          if claude plugin marketplace add DietrichGebert/ponytail </dev/null 2>/dev/null \
+             && claude plugin install ponytail@ponytail </dev/null 2>/dev/null; then
+            ok "plugin: ponytail (user-scoped; restart Claude Code)"
+          else skip "ponytail: claude plugin install failed — run manually:  claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail"; fi
+        else
+          skip "ponytail: 'claude' CLI not found — run in a Claude Code session:  /plugin marketplace add DietrichGebert/ponytail  then  /plugin install ponytail@ponytail"
+        fi
+        append_claudemd "# Build discipline
+Apply ponytail (YAGNI) discipline: stop at the first rung of the ladder that holds.
+No speculative abstractions, no boilerplate for later. Activate with \`/ponytail\` or
+load via the ponytail skill." ;;
+      graphify)
+        GPM=""
+        if command -v uv >/dev/null 2>&1; then GPM="uv tool install graphifyy"
+        elif command -v pipx >/dev/null 2>&1; then GPM="pipx install graphifyy"
+        elif command -v pip >/dev/null 2>&1; then GPM="pip install graphifyy"
+        fi
+        if [ -z "$GPM" ]; then
+          skip "graphify: no uv/pipx/pip on PATH — install one (e.g. curl -LsSf https://astral.sh/uv/install.sh | sh) then re-run; skipped"
+          continue
+        fi
+        say "  graphify: installing via ${GPM%% *}…"
+        if ( cd "$TARGET" && eval "$GPM" </dev/null ) && ( cd "$TARGET" && graphify install --project </dev/null ); then
+          append_claudemd "# Codebase graph
+Before searching raw files for architecture questions, read \`graphify-out/GRAPH_REPORT.md\`
+for god nodes and community structure. Use it to locate high-impact files before grepping."
+          ok "plugin: graphify — now run  /graphify .  in Claude Code to build the graph; commit graphify-out/"
+        else skip "graphify: install failed — continuing"; fi
+        case "$GPM" in pip\ *) say "  ${DIM}(pip: ensure graphify is on PATH — see uv/pipx if not)${RESET}";; esac ;;
+    esac
+  done
+fi
+
+# ========================================================================
 # Step 5 — Drift fingerprint
 # ========================================================================
 if contains "session-start" "${sel_hooks[@]:-}" && [ -x "$TARGET/.claude/hooks/session-start.sh" ]; then
@@ -561,6 +703,7 @@ say "  Target:             $TARGET"
 say "  Agents:              ${sel_agents[*]:-(none)}"
 say "  Rules:               ${sel_rules[*]:-(none)}"
 say "  Hooks:               ${sel_hooks[*]:-(none)}"
+say "  Plugins:             ${sel_plugins[*]:-(none)}"
 say "  Skills:              ${sel_skills[*]:-(none)}"
 say "  CLAUDE.md:           $CLAUDEMD_VERDICT"
 say "  Removed:             agents=${REMOVE_AGENTS[*]:-none} rules=${REMOVE_RULES[*]:-none} hooks=${REMOVE_HOOKS[*]:-none}"
