@@ -1,142 +1,201 @@
 # claude-code-starter
 
-A self-contained Claude Code plugin that scaffolds a tailored `.claude/` workspace
-(review agents, rules, deterministic hooks, recommended skills) plus a `CLAUDE.md`
-template into a project.
+A Claude Code plugin marketplace: 22 plugins (agents, skills, hooks, rules) that scaffold a tailored `.claude/` workspace into any project.
 
-## Two entry points, one flow
+## Entry points
 
-Both run the same five steps: scan the project → category-by-category selection
-(pre-marked from the scan) → install → write a record → summary.
+### `/setup-claude` (inside Claude Code)
 
-### 1. `/setup-claude` (inside Claude Code)
+Invoke the slash command in any session. Scans the project, recommends the right subset, and installs only what the evidence justifies. On an existing `.claude/` it runs as a gap analysis.
 
-Run the slash command in a session. The target is always the current working
-directory (no confirmation prompt). Each category is a conversational turn — Claude
-shows the recommended selection, you confirm or adjust, and it proceeds.
-
-### 2. `install.sh` (terminal)
+### `./install.sh` (terminal)
 
 ```bash
-./new/install.sh
+./install.sh
 ```
 
-Resolves its own location (`SCRIPT_DIR`), so it finds its bundled agents/rules/hooks
-no matter where you invoke it from. It adds one step before the shared flow:
+Same flow as `/setup-claude` but driven from the shell. Detects target directory, prints numbered checklists per category, accepts space-separated numbers / `a` / `n` / Enter for defaults. Requires bash + `bunx`.
 
-```
-Detected target directory: /path/to/current/project
-Install .claude/ here? [Y/n] or enter a different path:
-```
-
-Then each category prints as a numbered checklist. Enter space-separated numbers
-(`1 3 4`), `a` for all, `n` for none, or just press Enter to accept the pre-marked
-defaults. Requires only standard bash + `bunx` (no `fzf`/`dialog`/`jq`).
+Both entry points write `.claude/.claude-code-starter.json` — a record of version, timestamp, detected stack, and what was installed.
 
 ## What gets installed
 
-### Agents → `.claude/agents/`
+### Agents (8) → `.claude/agents/`
 
-| Agent                  | Focus                                           | Default when       |
-| ---------------------- | ----------------------------------------------- | ------------------ |
-| `code-reviewer`        | TS/Next/Hono correctness, type safety, patterns | always             |
-| `security-reviewer`    | auth, API authorization, env, Drizzle injection | always             |
-| `performance-reviewer` | re-renders, N+1 queries, bundle size            | Next.js or Drizzle |
-| `sanity-reviewer`      | Sanity schema, GROQ, content modeling           | Sanity             |
-| `doc-reviewer`         | inline docs, README, CLAUDE.md                  | always             |
+| Agent                    | Purpose                                                       | Default when                       |
+| ------------------------ | ------------------------------------------------------------- | ---------------------------------- |
+| `code-reviewer`          | TS/Next/Hono correctness, type safety, patterns               | Always                             |
+| `security-reviewer`      | Auth flows, API authorization, env, Drizzle injection         | Auth or API surface detected       |
+| `performance-reviewer`   | Re-renders, N+1 queries, bundle size                          | Next.js or Drizzle detected        |
+| `sanity-reviewer`        | Sanity schema, GROQ queries, content modeling                 | `sanity.config.*` detected         |
+| `doc-reviewer`           | Inline docs, README quality, CLAUDE.md completeness           | Always                             |
+| `frontend-designer`      | Tokens-first UI, anti-AI-slop aesthetics, accessibility       | Frontend files detected            |
+| `pr-test-analyzer`       | Judges whether tests actually verify behavior, catches mock theater | Test runner detected          |
+| `silent-failure-hunter`  | Finds swallowed errors and failures masked as success         | Always                             |
 
-### Rules → `.claude/rules/`
+Agents are invoked on demand (e.g. "use the security-reviewer agent") — they do not run automatically.
 
-| Rule           | Covers                                                    | Default when |
-| -------------- | --------------------------------------------------------- | ------------ |
-| `typescript`   | no `any`, infer from Drizzle, Zod at boundaries           | always       |
-| `git-workflow` | commits, branches, no force-push, no `--no-verify`        | always       |
-| `nextjs`       | App Router, server/client discipline                      | Next.js      |
-| `monorepo`     | Turbo/pnpm boundaries, no cross-package `../`, no barrels | Turbo/pnpm   |
+### Rules (16) → `.claude/rules/`
 
-### Hooks → `.claude/hooks/` + registered in `.claude/settings.json`
+Always-loaded (cost tokens every turn — kept tight):
 
-| Hook                       | Event / matcher             | Behavior                                                                            | Default when |
-| -------------------------- | --------------------------- | ----------------------------------------------------------------------------------- | ------------ |
-| `block-dangerous-commands` | PreToolUse / `Bash`         | blocks `rm -rf /`, `DROP TABLE`, `TRUNCATE`, `git push --force`, `--no-verify`      | always       |
-| `scan-secrets`             | PreToolUse / `Write\|Edit`  | blocks hardcoded secrets; skips `*.example`/`*.md`; ignores env refs & placeholders | always       |
-| `format-on-save`           | PostToolUse / `Write\|Edit` | `biome check --write` on `.ts`/`.tsx`; silent no-op without a Biome config          | Biome        |
+| Rule           | Covers                                                           |
+| -------------- | ---------------------------------------------------------------- |
+| `code-quality` | No premature abstraction, naming conventions, WHY-not-WHAT comments |
+| `testing`      | Behavior over implementation, real impls over mocks, one assertion per test |
+| `git-workflow` | Conventional commits, no force-push, no `--no-verify`           |
 
-Hooks read the tool-call JSON from stdin, **exit 0 to allow** and **exit 2 to block**
-(the stderr message is fed back to Claude). They are pure bash with an optional
-JSON parser (`python3`/`node`) and a fallback — no required dependencies.
+Path-scoped (only load when touching matching files):
 
-### Skills → installed via `bunx skills add … --skill …`
+| Rule             | Scope trigger                   | Covers                                              |
+| ---------------- | ------------------------------- | --------------------------------------------------- |
+| `typescript`     | `**/*.ts`, `**/*.tsx`           | No `any`, Drizzle/Zod inference, `satisfies`, branded IDs |
+| `react`          | `**/*.tsx`, `**/*.jsx`          | Composition, stable keys, React 19 async primitives |
+| `nextjs`         | `app/**`, `next.config.*`       | App Router, server/client discipline, DAL pattern   |
+| `hono`           | `**/*.ts`                       | Route structure, `zod-validator`, `onError`, RPC type |
+| `bun`            | `**/*.ts`, `bunfig.toml`        | Native APIs, `bun:test`, no `dotenv`                |
+| `golang`         | `**/*.go`                       | Standard layout, error wrapping, context, table tests |
+| `rust`           | `**/*.rs`, `Cargo.toml`         | `unsafe` discipline, typed errors, clippy-clean     |
+| `tailwind`       | `**/*.tsx`, `**/*.css`          | v4 CSS-first `@theme`, `cn()`, container queries    |
+| `monorepo`       | `apps/**`, `turbo.json`         | Turborepo boundaries, no cross-package `../`        |
+| `security`       | `src/api/**`, `src/auth/**`     | Input validation, parameterized queries, rate limiting |
+| `error-handling` | `src/api/**`, `src/services/**` | Typed errors, no swallowing, HTTP error shapes      |
+| `database`       | Migration dirs                  | Never edit existing migrations, reversibility, no raw SQL |
+| `frontend`       | `**/*.tsx`, `**/components/**`  | Design tokens, WCAG 2.1 AA, performance budget      |
 
-All skills are installed with the Vercel `skills` CLI
-([vercel-labs/skills](https://github.com/vercel-labs/skills)) from a **GitHub repo URL
-plus a skill name** — no marketplace or plugin install:
+### Hooks (10) → `.claude/hooks/` + `settings.json`
+
+Hooks exit `0` to allow and `2` to block; stderr is fed back to Claude.
+
+**Safety (always pre-marked):**
+
+| Hook                       | Event              | Behavior                                                                 |
+| -------------------------- | ------------------ | ------------------------------------------------------------------------ |
+| `block-dangerous-commands` | PreToolUse / Bash  | Blocks `rm -rf /~`, `DROP TABLE`, `git push --force`, `--no-verify`     |
+| `scan-secrets`             | PreToolUse / Write\|Edit | Blocks hardcoded tokens, DB URLs with credentials                  |
+| `protect-files`            | PreToolUse / Write\|Edit | Blocks `.env*`, certs, lockfiles, generated/minified, `.git/`      |
+| `warn-large-files`         | PreToolUse / Write\|Edit | Blocks `node_modules/`, build dirs, binary/media files             |
+
+**Quality (stack-conditional):**
+
+| Hook                 | Event                              | Behavior                                                       |
+| -------------------- | ---------------------------------- | -------------------------------------------------------------- |
+| `format-on-save`     | PostToolUse / Write\|Edit          | Auto-formats: Biome, Prettier, Ruff, Black, rustfmt, gofmt    |
+| `auto-test`          | PostToolUse / Write\|Edit          | Runs matching test file after edit; silent on success          |
+| `typecheck-on-stop`  | PostToolUse (marks) + Stop (runs)  | Type-checks once per turn; exits 2 on failure so Claude fixes  |
+| `lint-on-stop`       | PostToolUse (marks) + Stop (runs)  | Lints once per turn (same pattern as typecheck)                |
+
+**UX:**
+
+| Hook            | Event         | Behavior                                                     |
+| --------------- | ------------- | ------------------------------------------------------------ |
+| `notify`        | Notification  | Native OS notification (macOS/Linux/WSL)                     |
+| `session-start` | SessionStart  | Injects branch + dirty-state context (~5–10 tokens); drift nudge if stack changed |
+
+### Skills (11 bundled + 17 external)
+
+**Bundled** — ship with this plugin, no install needed:
+
+| Skill            | Invoke          | Purpose                                                              |
+| ---------------- | --------------- | -------------------------------------------------------------------- |
+| `setup-claude`   | `/setup-claude` | Scan → plan → install `.claude/` config, evidence-driven             |
+| `catchup`        | `/catchup`      | Rebuild context after `/clear`; `handoff` to write the session note  |
+| `debug-fix`      | `/debug-fix`    | Careful bug fix. `--fast` for hotfix branch                          |
+| `explain`        | `/explain`      | One-sentence summary + mental model; `verbose` for ASCII diagram     |
+| `fix-issue`      | `/fix-issue`    | GitHub issue → tested fix → closing PR                               |
+| `pr-review`      | `/pr-review`    | Six specialist agents in parallel; merge/needs-changes verdict        |
+| `refactor`       | `/refactor`     | Safe refactor with tests as safety net; `--diff` for pre-commit pass |
+| `ship`           | `/ship`         | Commit → push → PR with confirmation at each step                    |
+| `tdd`            | `/tdd`          | Red → green → refactor loop; commits after each cycle                |
+| `test-writer`    | `/test-writer`  | Comprehensive tests: happy/edge/error/concurrency paths              |
+| `claude-md`      | `/claude-md`    | Capture session learnings; `audit` to prune stale content            |
+| `context-budget` | `/context-budget` | Token cost estimate for `.claude/` config; `--api` for exact counts |
+
+**External** — installed with the Vercel `skills` CLI:
 
 ```bash
 bunx skills add <repo-url> --skill <skill-name> -a claude-code -y
 ```
 
-| Skill            | Repo                    | `--skill`          | Default when              |
-| ---------------- | ----------------------- | ------------------ | ------------------------- |
-| frontend-design  | `anthropics/skills`     | `frontend-design`  | Next.js                   |
-| webapp-testing   | `anthropics/skills`     | `webapp-testing`   | always                    |
-| next-pro-seo     | `madushan/next-pro-seo` | `next-pro-seo`     | Next.js                   |
-| brand-guidelines | `anthropics/skills`     | `brand-guidelines` | hospitality / real-estate |
-| mcp-builder      | `anthropics/skills`     | `mcp-builder`      | opt-in                    |
-| skill-creator    | `anthropics/skills`     | `skill-creator`    | opt-in                    |
+| Skill                       | Repo                                      | Default when                     |
+| --------------------------- | ----------------------------------------- | -------------------------------- |
+| `frontend-design`           | `anthropics/skills`                       | Frontend detected                |
+| `webapp-testing`            | `anthropics/skills`                       | Always                           |
+| `next-pro-seo`              | `madushan/next-pro-seo`                   | Next.js detected                 |
+| `brand-guidelines`          | `anthropics/skills`                       | Hospitality/marketing signals    |
+| `mcp-builder`               | `anthropics/skills`                       | Opt-in                           |
+| `skill-creator`             | `anthropics/skills`                       | Opt-in                           |
+| `vercel-react-best-practices` | `vercel-labs/agent-skills`              | React detected                   |
+| `vercel-composition-patterns` | `vercel-labs/agent-skills`              | React detected                   |
+| `shadcn`                    | `shadcn/ui`                               | React + `components/` dir        |
+| `systematic-debugging`      | `obra/superpowers`                        | Always                           |
+| `next-best-practices`       | `vercel-labs/next-skills`                 | Next.js detected                 |
+| `emil-design-eng`           | `emilkowalski/skills`                     | Next.js + framer-motion          |
+| `agent-browser`             | `vercel-labs/agent-browser`               | Playwright/Cypress detected      |
+| `web-design-guidelines`     | `vercel-labs/agent-skills`                | Frontend detected                |
+| `tdd`                       | `mattpocock/skills`                       | Test config detected             |
+| `to-prd`                    | `mattpocock/skills`                       | Opt-in                           |
+| `ui-ux-pro-max`             | `nextlevelbuilder/ui-ux-pro-max-skill`    | Frontend detected                |
 
-Add any repo whose skills live under `skills/<name>/SKILL.md` as a new row (use
-`bunx skills add <repo> --list` to discover names). Private repos (like
-`madushan/next-pro-seo`) need `gh auth` first; auth failures are non-fatal. See
-`skills/setup-claude/references/skills-catalog.md`.
+### Third-party plugins
+
+`/setup-claude` also offers three third-party plugins (all pre-selected by default):
+
+| Plugin      | What it does                                                   | Install mechanism                                               |
+| ----------- | -------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Caveman** | Ultra-compressed communication mode — cuts token noise ~75%    | `bunx skills add JuliusBrussee/caveman -a claude-code -y`      |
+| **Ponytail** | YAGNI enforcer — lazy senior dev discipline                   | `/plugin marketplace add DietrichGebert/ponytail` (user-scoped) |
+| **Graphify** | Codebase knowledge graph — god-node detection, community map | `uv tool install graphifyy && graphify claude install`          |
 
 ### CLAUDE.md
 
-Copies `templates/CLAUDE.template.md` to `./CLAUDE.md` (asks before overwriting an
-existing one). Includes the stack, code-style rules, a monorepo layout sketch, and
-placeholder `Project Overview` / `Key Decisions` / `Current Focus` / `Out of Scope`
-sections.
-
-## Record of what was installed
-
-Both entry points write `.claude/.madushan-setup.json` capturing the version,
-timestamp, detected stack, and exactly what was installed in each category.
+Copies `templates/CLAUDE.template.md` to `./CLAUDE.md` (asks before overwriting). Includes stack, code-style rules, monorepo layout sketch, and placeholder `Project Overview / Key Decisions / Current Focus / Out of Scope` sections.
 
 ## Safety properties
 
 - Neither entry point writes anywhere except `.claude/` and `./CLAUDE.md`.
-- Existing managed files are **kept, not overwritten**; `CLAUDE.md` overwrite is
-  always confirmed.
-- The `settings.json` merge is **non-destructive and idempotent** — existing hooks
-  and other settings are preserved, and re-running never duplicates entries.
+- Existing files are kept, not overwritten; `CLAUDE.md` overwrite is always confirmed.
+- `settings.json` merge is non-destructive and idempotent — existing hooks are preserved, re-running never duplicates entries.
+- Hooks fail open (exit 0) when `jq` is missing, except file-protection hooks which fail closed.
 
-## Notes & conventions
+## Plugin marketplace
 
-- **Skills are GitHub-only.** Every skill is installed with
-  `bunx skills add <repo-url> --skill <name> -a claude-code -y` (Bun-first stack; `npx
-skills add` works the same). No Claude Code marketplace or `claude plugin install` is
-  used. Each catalog row is a repo URL + a `--skill` name; private repos need `gh auth`.
-- **`Write|Edit` matcher** (not `Write` alone) so `Edit` operations are also
-  scanned and formatted.
-- `install.sh` finds its sources via `SCRIPT_DIR`; the slash command uses
-  `${CLAUDE_PLUGIN_ROOT}`. Neither relies on the current directory for locating
-  plugin files.
+All 22 plugins are individually installable via the Claude Code plugin system:
+
+```bash
+# Install the full marketplace
+claude plugin marketplace add madushan/claude-code-starter
+
+# Install a single plugin
+claude plugin install setup-claude@claude-code-starter
+claude plugin install safety-hooks@claude-code-starter
+claude plugin install quality-hooks@claude-code-starter
+```
 
 ## Layout
 
 ```
-new/
-├── .claude-plugin/plugin.json
-├── skills/setup-claude/
-│   ├── SKILL.md
-│   └── references/{agents,rules,hooks,skills}-catalog.md
-├── agents/      # 5 review agents
-├── rules/       # 4 rules
-├── hooks/       # 3 hook scripts
-├── templates/CLAUDE.template.md
-├── install.sh
+claude-code-starter/
+├── .claude-plugin/marketplace.json   # marketplace manifest
+├── agents/                           # 8 review agent definitions
+├── rules/                            # 16 rule files
+├── hooks/                            # 10 hook scripts + tests/
+├── skills/                           # 11 bundled skill dirs
+├── plugins/                          # 22 plugin dirs (plugin.json + symlinks)
+├── templates/
+│   ├── CLAUDE.template.md            # shipped to user projects by /setup-claude
+│   └── settings.json                 # hook-wired settings template
+├── install.sh                        # terminal entry point
 └── README.md
 ```
 
-After running either entry point, **restart Claude Code** so the new agents, rules,
-and hooks are loaded.
+`plugins/<name>/` contains only a `.claude-plugin/plugin.json` and relative symlinks into the top-level dirs — no copies.
+
+## Development
+
+```bash
+bash hooks/tests/run-all.sh          # run all hook fixture tests (requires jq)
+claude plugin validate . --strict    # validate marketplace + plugin manifests
+```
+
+Every new or modified hook ships with fixtures under `hooks/tests/fixtures/<hook-name>/`. After changing any manifest, skill, or agent frontmatter, run `claude plugin validate . --strict`.
