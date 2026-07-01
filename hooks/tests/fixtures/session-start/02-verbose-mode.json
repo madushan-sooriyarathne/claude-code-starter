@@ -1,6 +1,0 @@
-{
-  "name": "verbose mode exits 0",
-  "stdin": {},
-  "env": { "CLAUDE_CODE_STARTER_SESSION_VERBOSE": "1" },
-  "expect_exit": 0
-}

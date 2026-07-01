@@ -1,1 +1,1 @@
-../../../hooks/auto-test.sh
+../../../hooks/claude/auto-test.sh

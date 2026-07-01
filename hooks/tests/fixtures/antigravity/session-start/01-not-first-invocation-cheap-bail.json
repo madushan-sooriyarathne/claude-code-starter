@@ -1,0 +1,6 @@
+{
+  "name": "invocationNum other than 0 bails immediately with no injectSteps",
+  "stdin": { "invocationNum": 1, "initialNumSteps": 5, "conversationId": "ag-session-1" },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["{}"]
+}

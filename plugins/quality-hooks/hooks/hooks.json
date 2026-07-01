@@ -1,5 +1,5 @@
 {
-  "description": "claude-code-starter quality hooks: format-on-save, auto-test on edit, and once-per-turn typecheck/lint on stop.",
+  "description": "agent-starter quality hooks: format-on-save, auto-test on edit, and once-per-turn typecheck/lint on stop.",
   "hooks": {
     "PostToolUse": [
       {

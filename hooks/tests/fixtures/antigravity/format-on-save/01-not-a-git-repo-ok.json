@@ -1,0 +1,6 @@
+{
+  "name": "workspacePaths pointing outside any git repo exits ok",
+  "stdin": { "executionNum": 1, "terminationReason": "model_stop", "error": "", "fullyIdle": true, "conversationId": "ag-format-1", "workspacePaths": ["/"] },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["\"decision\":\"ok\""]
+}

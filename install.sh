@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 #
-# claude-code-starter — install.sh
+# agent-starter — install.sh
 #
-# Terminal entry point. Scaffolds a tailored .claude/ workspace (agents, rules,
-# hooks, skills) and CLAUDE.md into a project. Same flow as the /setup-claude
-# slash command. Standard bash + bunx only; no fzf/dialog/jq dependencies.
+# Terminal entry point. Scaffolds a tailored agent workspace into a project for
+# one or both supported hosts:
+#   - Claude Code  -> .claude/{agents,rules,hooks} + settings.json + CLAUDE.md
+#   - Antigravity  -> .agents/plugins/setup-agents/{skills,rules,hooks.json} + AGENTS.md
+# Same flow as the /setup-agents slash command. Standard bash + bunx only.
 #
 # Usage:  ./install.sh
 #
@@ -14,7 +16,16 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="0.3.0"
+VERSION="0.4.0"
+
+# Hooks with a native Antigravity implementation (hooks/antigravity/<name>.sh).
+# The 4 PreToolUse safety guardrails map 1:1. The other 6 needed a redesign
+# since AG's PostToolUse carries no tool args: typecheck-on-stop/lint-on-stop/
+# format-on-save/auto-test/notify run on Stop (git status/diff replaces the
+# PostToolUse marker), session-start runs on PreInvocation (invocationNum==0
+# substitutes for the SessionStart event AG doesn't have).
+AG_SUPPORTED_HOOKS="block-dangerous-commands scan-secrets protect-files warn-large-files typecheck-on-stop lint-on-stop format-on-save auto-test notify session-start"
+AG_PLUGIN_NAME="setup-agents"
 
 # ---- pretty output -------------------------------------------------------
 if [ -t 1 ]; then
@@ -54,7 +65,7 @@ json_array() {
   printf '[%s]' "$out"
 }
 
-say "${BOLD}claude-code-starter${RESET} v$VERSION — Claude Code project setup"
+say "${BOLD}agent-starter${RESET} v$VERSION — agent project setup"
 
 # ========================================================================
 # Step 0 — Target directory (install.sh only)
@@ -75,6 +86,26 @@ if [ ! -d "$TARGET" ]; then
   say "${YELLOW}Path is not a directory:${RESET} $TARGET"; exit 1
 fi
 TARGET="$(cd "$TARGET" && pwd)"
+
+# ========================================================================
+# Step 0.5 — Target platform(s)
+# ========================================================================
+# WANT_CLAUDE / WANT_AG gate the two materialization paths in Step 4. Selection
+# (agents/rules/hooks) is host-agnostic; only how it's written to disk differs.
+WANT_CLAUDE=1; WANT_AG=0
+say ""
+say "Which agent host(s) to set up?"
+say "  1) Claude Code  ${DIM}(.claude/, default)${RESET}"
+say "  2) Antigravity  ${DIM}(.agents/plugins/$AG_PLUGIN_NAME/)${RESET}"
+say "  3) Both"
+printf "> "
+ask_line
+case "$REPLY_LINE" in
+  ""|1|claude|Claude)        WANT_CLAUDE=1; WANT_AG=0 ;;
+  2|antigravity|Antigravity) WANT_CLAUDE=0; WANT_AG=1 ;;
+  3|both|Both)               WANT_CLAUDE=1; WANT_AG=1 ;;
+  *)                         WANT_CLAUDE=1; WANT_AG=0; say "  ${DIM}Unrecognized — defaulting to Claude Code.${RESET}" ;;
+esac
 
 # ---- mechanical detection helpers (no node_modules/.git/vendor/build noise) ----
 PRUNE_EXPR=( -path '*/node_modules/*' -o -path '*/.git/*' -o -path '*/vendor/*' -o -path '*/dist/*' -o -path '*/build/*' -o -path '*/.next/*' )
@@ -457,6 +488,9 @@ fi
 # ========================================================================
 head "Installing"
 
+if [ "$WANT_CLAUDE" = "1" ]; then
+say "${DIM}Claude Code → .claude/${RESET}"
+
 if [ ${#sel_agents[@]} -gt 0 ]; then
   mkdir -p "$TARGET/.claude/agents"
   for a in "${sel_agents[@]}"; do
@@ -483,7 +517,7 @@ fi
 if [ ${#sel_hooks[@]} -gt 0 ]; then
   mkdir -p "$TARGET/.claude/hooks"
   for h in "${sel_hooks[@]}"; do
-    copy_managed "$SCRIPT_DIR/hooks/$h.sh" "$TARGET/.claude/hooks/$h.sh" "hook: $h"
+    copy_managed "$SCRIPT_DIR/hooks/claude/$h.sh" "$TARGET/.claude/hooks/$h.sh" "hook: $h"
     [ -f "$TARGET/.claude/hooks/$h.sh" ] && chmod +x "$TARGET/.claude/hooks/$h.sh"
   done
 fi
@@ -567,33 +601,9 @@ else
   skip "node/bun not found — hooks copied but settings.json not updated"
 fi
 
-# Skills (GitHub repos via the Vercel `skills` CLI: add <repo> --skill <name>)
-if [ ${#sel_skills[@]} -gt 0 ]; then
-  RUNNER=""
-  command -v bunx >/dev/null 2>&1 && RUNNER="bunx"
-  [ -z "$RUNNER" ] && command -v npx >/dev/null 2>&1 && RUNNER="npx"
-  if [ -z "$RUNNER" ]; then
-    skip "bunx/npx not found — skipping skill installation"
-    sel_skills=()
-  else
-    installed_skills=()
-    for s_name in "${sel_skills[@]}"; do
-      repo=""; skn="$s_name"; idx=0
-      for nm in "${skills_names[@]}"; do
-        if [ "$nm" = "$s_name" ]; then repo="${skills_repos[$idx]}"; skn="${skills_skillnames[$idx]}"; break; fi
-        idx=$((idx+1))
-      done
-      printf "  installing skill: %s --skill %s\n" "$repo" "$skn"
-      if ( cd "$TARGET" && "$RUNNER" skills add "$repo" --skill "$skn" -a claude-code -y </dev/null ); then
-        ok "skill: $skn"
-        installed_skills+=("$skn")
-      else
-        skip "skill failed: $skn (private repos need 'gh auth' — continuing)"
-      fi
-    done
-    sel_skills=(); [ ${#installed_skills[@]} -gt 0 ] && sel_skills=("${installed_skills[@]}")
-  fi
-fi
+# Skills catalog + third-party plugins install further down (Step 4c), after
+# both hosts' materialization — they're host-parameterized (claude-code and/or
+# antigravity-cli adapters) rather than Claude-only.
 
 # CLAUDE.md (+ budget check)
 CLAUDEMD_VERDICT="n/a"
@@ -616,11 +626,201 @@ if [ "$WANT_CLAUDEMD" = "1" ]; then
 fi
 
 # ========================================================================
-# Third-party plugins (caveman / ponytail / graphify). All non-fatal.
+# Step 5 — Drift fingerprint
 # ========================================================================
-append_claudemd() { # append_claudemd "<markdown block>" — creates CLAUDE.md if absent
-  printf '\n%s\n' "$1" >> "$TARGET/CLAUDE.md"
+if contains "session-start" "${sel_hooks[@]:-}" && [ -x "$TARGET/.claude/hooks/session-start.sh" ]; then
+  AGENT_STARTER_FINGERPRINT=1 "$TARGET/.claude/hooks/session-start.sh" > "$TARGET/.claude/.agent-starter.json" \
+    && ok "wrote drift fingerprint .claude/.agent-starter.json"
+else
+  skip "session-start hook not installed — no drift detection; re-run install.sh manually after stack changes"
+fi
+
+fi  # end WANT_CLAUDE
+
+# ========================================================================
+# Step 4b — Antigravity install (.agents/plugins/<name>/)
+# ========================================================================
+# Antigravity's plugin layout mirrors Claude's: markdown skills + rules + hooks.
+# `agy` does validate a native agents/<name>.md component, but whether it's
+# actually a delegable subagent at runtime (vs. Claude's Task-tool subagents)
+# is unconfirmed, so agents still ship as skills here (auto slash cmds) — the
+# safe, verified path. Safety hooks ship as native duplicates from
+# hooks/antigravity/ (own I/O contract, no translation shim) rather than
+# running the Claude-shaped hooks/claude/ scripts unchanged.
+AG_INSTALLED_SKILLS=(); AG_INSTALLED_RULES=(); AG_INSTALLED_HOOKS=()
+if [ "$WANT_AG" = "1" ]; then
+  head "Antigravity → .agents/plugins/$AG_PLUGIN_NAME/"
+  AG_ROOT="$TARGET/.agents/plugins/$AG_PLUGIN_NAME"
+  mkdir -p "$AG_ROOT"
+
+  # plugin.json — required marker. Only "name" is required by `agy plugin
+  # validate`; no official $schema URL is published, so we don't ship one.
+  cat > "$AG_ROOT/plugin.json" <<JSON
+{
+  "name": "$AG_PLUGIN_NAME",
+  "description": "Project guardrails, rules, and reviewer skills scaffolded by agent-starter."
 }
+JSON
+  ok "plugin.json"
+
+  # Rules → rules/<name>.md (identical markdown convention).
+  if [ ${#sel_rules[@]} -gt 0 ]; then
+    mkdir -p "$AG_ROOT/rules"
+    for r in "${sel_rules[@]}"; do
+      if copy_managed "$SCRIPT_DIR/rules/$r.md" "$AG_ROOT/rules/$r.md" "rule: $r"; then
+        AG_INSTALLED_RULES+=("$r")
+        if [ -n "$PRIMARY_SRC_DIR" ] && grep -q '^paths:' "$AG_ROOT/rules/$r.md" 2>/dev/null; then
+          sed -i.bak "/^paths:/,/^---/ s#\"src/#\"$PRIMARY_SRC_DIR/#g" "$AG_ROOT/rules/$r.md"; rm -f "$AG_ROOT/rules/$r.md.bak"
+        fi
+      fi
+    done
+  fi
+
+  # Agents → skills/<name>/SKILL.md. AG subagents have no static file format, so
+  # the agent's instructions ship as a skill (becomes a /<name> slash command).
+  # Frontmatter is reduced to name+description; the body is carried verbatim.
+  if [ ${#sel_agents[@]} -gt 0 ]; then
+    for a in "${sel_agents[@]}"; do
+      src="$SCRIPT_DIR/agents/$a.md"
+      [ -f "$src" ] || { skip "agent: $a (source missing)"; continue; }
+      dest_dir="$AG_ROOT/skills/$a"; dest="$dest_dir/SKILL.md"
+      if [ -e "$dest" ]; then skip "skill: $a (exists, kept)"; continue; fi
+      mkdir -p "$dest_dir"
+      desc="$(awk -F': ' '/^description:/{ $1=""; sub(/^: /,""); print substr($0,2); exit }' "$src")"
+      {
+        printf '%s\n' "---"
+        printf 'name: %s\n' "$a"
+        printf 'description: %s\n' "${desc:-$a}"
+        printf '%s\n' "---"
+        # Body = everything after the closing frontmatter delimiter.
+        awk 'BEGIN{d=0} /^---[[:space:]]*$/{d++; next} d>=2{print}' "$src"
+      } > "$dest"
+      ok "skill (from agent): $a"; AG_INSTALLED_SKILLS+=("$a")
+    done
+  fi
+
+  # Hooks → copy the native antigravity/ scripts (duplicated logic, no
+  # translation shim), generate hooks.json.
+  ag_hooks=()
+  for h in "${sel_hooks[@]:-}"; do
+    [ -n "$h" ] || continue
+    case " $AG_SUPPORTED_HOOKS " in *" $h "*) ag_hooks+=("$h") ;; *) skip "hook: $h (not supported on Antigravity)" ;; esac
+  done
+  if [ ${#ag_hooks[@]} -gt 0 ]; then
+    for h in "${ag_hooks[@]}"; do
+      cp "$SCRIPT_DIR/hooks/antigravity/$h.sh" "$AG_ROOT/$h.sh" && chmod +x "$AG_ROOT/$h.sh" && AG_INSTALLED_HOOKS+=("$h")
+    done
+    # hooks.json: map each hook straight to its native script — no adapter, no AG_HOOK indirection.
+    # PreToolUse/PostToolUse use the matcher+hooks[] wrapper; PreInvocation/
+    # PostInvocation/Stop are a flat handler array with no matcher.
+    WRITE_MATCHER="write_to_file|replace_file_content|multi_replace_file_content"
+    ag_hook_event() {
+      case "$1" in
+        block-dangerous-commands|scan-secrets|protect-files|warn-large-files) echo "PreToolUse" ;;
+        session-start) echo "PreInvocation" ;;
+        *) echo "Stop" ;;
+      esac
+    }
+    ag_hook_matcher() {
+      case "$1" in
+        block-dangerous-commands) echo "run_command" ;;
+        scan-secrets|protect-files|warn-large-files) echo "$WRITE_MATCHER" ;;
+        *) echo "" ;;
+      esac
+    }
+    ag_hook_timeout() {
+      case "$1" in
+        auto-test) echo 120 ;;
+        typecheck-on-stop|lint-on-stop) echo 60 ;;
+        format-on-save) echo 30 ;;
+        *) echo 10 ;;
+      esac
+    }
+    {
+      printf '{\n'
+      first=1
+      for h in "${ag_hooks[@]}"; do
+        event=$(ag_hook_event "$h")
+        t=$(ag_hook_timeout "$h")
+        [ $first -eq 1 ] && first=0 || printf ',\n'
+        if [ "$event" = "PreToolUse" ]; then
+          m=$(ag_hook_matcher "$h")
+          printf '  "%s": {\n    "%s": [\n      {\n        "matcher": "%s",\n        "hooks": [\n          { "type": "command", "command": "bash \\"%s\\"", "timeout": %s }\n        ]\n      }\n    ]\n  }' "$h" "$event" "$m" "$AG_ROOT/$h.sh" "$t"
+        else
+          printf '  "%s": {\n    "%s": [\n      { "type": "command", "command": "bash \\"%s\\"", "timeout": %s }\n    ]\n  }' "$h" "$event" "$AG_ROOT/$h.sh" "$t"
+        fi
+      done
+      printf '\n}\n'
+    } > "$AG_ROOT/hooks.json"
+    ok "hooks.json (${#ag_hooks[@]} hook$([ ${#ag_hooks[@]} -ne 1 ] && echo s), native)"
+  fi
+
+  # Project context → AGENTS.md (Antigravity's CLAUDE.md equivalent).
+  if [ "$WANT_CLAUDEMD" = "1" ] && [ -f "$SCRIPT_DIR/templates/CLAUDE.template.md" ]; then
+    if [ -e "$TARGET/AGENTS.md" ]; then skip "AGENTS.md (exists, kept)"
+    else cp "$SCRIPT_DIR/templates/CLAUDE.template.md" "$TARGET/AGENTS.md" && ok "AGENTS.md"; fi
+  fi
+
+  # Drift fingerprint (mirrors Claude Step 5) — session-start.sh reads this
+  # back on its next invocationNum==0 PreInvocation to detect stack drift.
+  if contains "session-start" "${sel_hooks[@]:-}" && [ -x "$AG_ROOT/session-start.sh" ]; then
+    AGENT_STARTER_FINGERPRINT=1 "$AG_ROOT/session-start.sh" > "$AG_ROOT/.agent-starter.json" \
+      && ok "wrote drift fingerprint $AG_PLUGIN_NAME/.agent-starter.json"
+  else
+    skip "session-start hook not installed — no drift detection; re-run install.sh manually after stack changes"
+  fi
+fi  # end WANT_AG
+
+# ========================================================================
+# Step 4c — Skills catalog + third-party plugins (host-aware)
+# ========================================================================
+# Both use the Vercel `skills` CLI, which supports a project-scoped
+# `antigravity-cli` adapter (writes .agents/skills/) alongside `claude-code`
+# (writes .claude/skills/) — so these run for whichever host(s) were selected,
+# not just Claude Code. CLAUDE.md/AGENTS.md already exist by this point.
+append_contextmd() { # append_contextmd <claude|ag|both> "<markdown block>"
+  case "$1" in claude|both) [ "$WANT_CLAUDE" = "1" ] && [ -f "$TARGET/CLAUDE.md" ] \
+    && printf '\n%s\n' "$2" >> "$TARGET/CLAUDE.md" ;; esac
+  case "$1" in ag|both) [ "$WANT_AG" = "1" ] && [ -f "$TARGET/AGENTS.md" ] \
+    && printf '\n%s\n' "$2" >> "$TARGET/AGENTS.md" ;; esac
+}
+SKILL_ADAPTERS=()
+[ "$WANT_CLAUDE" = "1" ] && SKILL_ADAPTERS+=("claude-code")
+[ "$WANT_AG" = "1" ] && SKILL_ADAPTERS+=("antigravity-cli")
+
+if [ ${#sel_skills[@]} -gt 0 ]; then
+  RUNNER=""
+  command -v bunx >/dev/null 2>&1 && RUNNER="bunx"
+  [ -z "$RUNNER" ] && command -v npx >/dev/null 2>&1 && RUNNER="npx"
+  if [ -z "$RUNNER" ]; then
+    skip "bunx/npx not found — skipping skill installation"
+    sel_skills=()
+  else
+    installed_skills=()
+    for s_name in "${sel_skills[@]}"; do
+      repo=""; skn="$s_name"; idx=0
+      for nm in "${skills_names[@]}"; do
+        if [ "$nm" = "$s_name" ]; then repo="${skills_repos[$idx]}"; skn="${skills_skillnames[$idx]}"; break; fi
+        idx=$((idx+1))
+      done
+      installed_any=0
+      for adapter in "${SKILL_ADAPTERS[@]}"; do
+        printf "  installing skill: %s --skill %s (%s)\n" "$repo" "$skn" "$adapter"
+        if ( cd "$TARGET" && "$RUNNER" skills add "$repo" --skill "$skn" -a "$adapter" -y </dev/null ); then
+          installed_any=1
+        fi
+      done
+      if [ "$installed_any" = "1" ]; then
+        ok "skill: $skn"
+        installed_skills+=("$skn")
+      else
+        skip "skill failed: $skn (private repos need 'gh auth' — continuing)"
+      fi
+    done
+    sel_skills=(); [ ${#installed_skills[@]} -gt 0 ] && sel_skills=("${installed_skills[@]}")
+  fi
+fi
+
 if [ ${#sel_plugins[@]} -gt 0 ]; then
   head "Third-party plugins"
   PRUNNER=""
@@ -631,25 +831,34 @@ if [ ${#sel_plugins[@]} -gt 0 ]; then
     case "$p" in
       caveman)
         if [ -z "$PRUNNER" ]; then skip "caveman: bunx/npx not found — skipped"; continue; fi
-        if ( cd "$TARGET" && "$PRUNNER" skills add JuliusBrussee/caveman -a claude-code -y </dev/null ); then
-          append_claudemd "# Communication style
+        installed_any=0
+        for adapter in "${SKILL_ADAPTERS[@]}"; do
+          ( cd "$TARGET" && "$PRUNNER" skills add JuliusBrussee/caveman -a "$adapter" -y </dev/null ) && installed_any=1
+        done
+        if [ "$installed_any" = "1" ]; then
+          append_contextmd both "# Communication style
 Use caveman mode for all responses: drop articles, drop filler words, fragments OK.
 Activate with \`/caveman\` at session start (or load via skill)."
           ok "plugin: caveman"
         else skip "caveman: install failed — continuing"; fi ;;
       ponytail)
-        if command -v claude >/dev/null 2>&1; then
-          if claude plugin marketplace add DietrichGebert/ponytail </dev/null 2>/dev/null \
-             && claude plugin install ponytail@ponytail </dev/null 2>/dev/null; then
-            ok "plugin: ponytail (user-scoped; restart Claude Code)"
-          else skip "ponytail: claude plugin install failed — run manually:  claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail"; fi
-        else
-          skip "ponytail: 'claude' CLI not found — run in a Claude Code session:  /plugin marketplace add DietrichGebert/ponytail  then  /plugin install ponytail@ponytail"
-        fi
-        append_claudemd "# Build discipline
+        # Claude-only: no `agy`-native equivalent of `claude plugin marketplace add` is
+        # confirmed yet (see CLAUDE.md), so this only runs when WANT_CLAUDE.
+        if [ "$WANT_CLAUDE" = "1" ]; then
+          if command -v claude >/dev/null 2>&1; then
+            if claude plugin marketplace add DietrichGebert/ponytail </dev/null 2>/dev/null \
+               && claude plugin install ponytail@ponytail </dev/null 2>/dev/null; then
+              ok "plugin: ponytail (user-scoped; restart Claude Code)"
+            else skip "ponytail: claude plugin install failed — run manually:  claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail"; fi
+          else
+            skip "ponytail: 'claude' CLI not found — run in a Claude Code session:  /plugin marketplace add DietrichGebert/ponytail  then  /plugin install ponytail@ponytail"
+          fi
+          append_contextmd claude "# Build discipline
 Apply ponytail (YAGNI) discipline: stop at the first rung of the ladder that holds.
 No speculative abstractions, no boilerplate for later. Activate with \`/ponytail\` or
-load via the ponytail skill." ;;
+load via the ponytail skill."
+        fi
+        [ "$WANT_AG" = "1" ] && skip "ponytail: Claude Code only — no Antigravity equivalent, skipped" ;;
       graphify)
         GPM=""
         if command -v uv >/dev/null 2>&1; then GPM="uv tool install graphifyy"
@@ -662,7 +871,7 @@ load via the ponytail skill." ;;
         fi
         say "  graphify: installing via ${GPM%% *}…"
         if ( cd "$TARGET" && eval "$GPM" </dev/null ) && ( cd "$TARGET" && graphify install --project </dev/null ); then
-          append_claudemd "# Codebase graph
+          append_contextmd both "# Codebase graph
 Before searching raw files for architecture questions, read \`graphify-out/GRAPH_REPORT.md\`
 for god nodes and community structure. Use it to locate high-impact files before grepping."
           ok "plugin: graphify — now run  /graphify .  in Claude Code to build the graph; commit graphify-out/"
@@ -673,22 +882,22 @@ for god nodes and community structure. Use it to locate high-impact files before
 fi
 
 # ========================================================================
-# Step 5 — Drift fingerprint
-# ========================================================================
-if contains "session-start" "${sel_hooks[@]:-}" && [ -x "$TARGET/.claude/hooks/session-start.sh" ]; then
-  CLAUDE_CODE_STARTER_FINGERPRINT=1 "$TARGET/.claude/hooks/session-start.sh" > "$TARGET/.claude/.claude-code-starter.json" \
-    && ok "wrote drift fingerprint .claude/.claude-code-starter.json"
-else
-  skip "session-start hook not installed — no drift detection; re-run install.sh manually after stack changes"
-fi
-
-# ========================================================================
 # Step 6 — Verify and report
 # ========================================================================
 head "Verify"
-for h in "${sel_hooks[@]:-}"; do
-  [ -n "$h" ] && [ ! -x "$TARGET/.claude/hooks/$h.sh" ] && say "  ${YELLOW}warn${RESET}: hook not executable: $h"
-done
+if [ "$WANT_CLAUDE" = "1" ]; then
+  for h in "${sel_hooks[@]:-}"; do
+    [ -n "$h" ] && [ ! -x "$TARGET/.claude/hooks/$h.sh" ] && say "  ${YELLOW}warn${RESET}: hook not executable: $h"
+  done
+fi
+if [ "$WANT_AG" = "1" ]; then
+  for h in "${AG_INSTALLED_HOOKS[@]:-}"; do
+    [ -n "$h" ] && [ ! -x "$TARGET/.agents/plugins/$AG_PLUGIN_NAME/$h.sh" ] && say "  ${YELLOW}warn${RESET}: AG hook not executable: $h"
+  done
+  command -v jq >/dev/null 2>&1 && [ -f "$TARGET/.agents/plugins/$AG_PLUGIN_NAME/hooks.json" ] \
+    && { jq empty "$TARGET/.agents/plugins/$AG_PLUGIN_NAME/hooks.json" 2>/dev/null \
+         && ok "hooks.json is valid JSON" || say "  ${YELLOW}warn${RESET}: hooks.json failed JSON validation"; }
+fi
 
 TOKEN_CHARS=0
 [ -f "$TARGET/CLAUDE.md" ] && TOKEN_CHARS=$((TOKEN_CHARS + $(wc -c < "$TARGET/CLAUDE.md" | tr -d ' ')))
@@ -698,16 +907,30 @@ for r in "${sel_rules[@]:-}"; do
 done
 TOKEN_EST=$((TOKEN_CHARS / 4))
 
+plats=""; [ "$WANT_CLAUDE" = "1" ] && plats="Claude Code"; [ "$WANT_AG" = "1" ] && plats="${plats:+$plats + }Antigravity"
 head "Done"
 say "  Target:             $TARGET"
-say "  Agents:              ${sel_agents[*]:-(none)}"
-say "  Rules:               ${sel_rules[*]:-(none)}"
-say "  Hooks:               ${sel_hooks[*]:-(none)}"
-say "  Plugins:             ${sel_plugins[*]:-(none)}"
-say "  Skills:              ${sel_skills[*]:-(none)}"
-say "  CLAUDE.md:           $CLAUDEMD_VERDICT"
-say "  Removed:             agents=${REMOVE_AGENTS[*]:-none} rules=${REMOVE_RULES[*]:-none} hooks=${REMOVE_HOOKS[*]:-none}"
-say "  Always-loaded est.:  ~${TOKEN_EST} tokens (CLAUDE.md + path-less rules)"
+say "  Platform(s):         $plats"
+if [ "$WANT_CLAUDE" = "1" ]; then
+  say "  ${BOLD}Claude Code (.claude/)${RESET}"
+  say "    Agents:            ${sel_agents[*]:-(none)}"
+  say "    Rules:             ${sel_rules[*]:-(none)}"
+  say "    Hooks:             ${sel_hooks[*]:-(none)}"
+  say "    Plugins:           ${sel_plugins[*]:-(none)}"
+  say "    Skills:            ${sel_skills[*]:-(none)}"
+  say "    CLAUDE.md:         $CLAUDEMD_VERDICT"
+  say "    Removed:           agents=${REMOVE_AGENTS[*]:-none} rules=${REMOVE_RULES[*]:-none} hooks=${REMOVE_HOOKS[*]:-none}"
+fi
+if [ "$WANT_AG" = "1" ]; then
+  say "  ${BOLD}Antigravity (.agents/plugins/$AG_PLUGIN_NAME/)${RESET}"
+  say "    Agents (as skills): ${AG_INSTALLED_SKILLS[*]:-(none)}"
+  say "    Rules:             ${AG_INSTALLED_RULES[*]:-(none)}"
+  say "    Hooks:             ${AG_INSTALLED_HOOKS[*]:-(none)} ${DIM}(safety guardrails only)${RESET}"
+  say "    Plugins:           ${sel_plugins[*]:-(none)}"
+  say "    Skills (catalog):  ${sel_skills[*]:-(none)} ${DIM}(.agents/skills/)${RESET}"
+fi
+say "  Always-loaded est.:  ~${TOKEN_EST} tokens (CLAUDE.md/AGENTS.md + path-less rules)"
 [ "$TOKEN_EST" -gt 1000 ] 2>/dev/null && say "  ${YELLOW}Consider trimming — over the ~1000 token always-loaded budget.${RESET}"
 say ""
-say "${YELLOW}Restart Claude Code${RESET} so the new agents, rules, and hooks are picked up."
+[ "$WANT_CLAUDE" = "1" ] && say "${YELLOW}Restart Claude Code${RESET} so the new agents, rules, and hooks are picked up."
+[ "$WANT_AG" = "1" ] && say "${YELLOW}Reload Antigravity${RESET} (or run 'agy plugin list') so the $AG_PLUGIN_NAME plugin is discovered."

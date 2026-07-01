@@ -1,1 +1,1 @@
-../../../hooks/warn-large-files.sh
+../../../hooks/claude/warn-large-files.sh

@@ -1,0 +1,7 @@
+{
+  "name": "fullyIdle true dry-run prints the notification",
+  "stdin": { "executionNum": 1, "terminationReason": "model_stop", "error": "", "fullyIdle": true, "conversationId": "ag-notify-1" },
+  "env": { "AGENT_STARTER_NOTIFY_DRYRUN": "1" },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["notify:", "Antigravity finished (model_stop)", "\"decision\":\"ok\""]
+}

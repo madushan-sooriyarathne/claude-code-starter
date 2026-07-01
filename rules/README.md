@@ -114,6 +114,6 @@ paths:
 - Instructions that only apply when touching these files
 ```
 
-If a language/framework can't be reliably distinguished from its file extension alone (e.g. Bun vs Node both use `.ts`), scope broadly and rely on `setup-claude`'s dependency/config-file detection to keep the rule out of projects that don't use that stack in the first place — see `skills/setup-claude/references/rules-catalog.md`.
+If a language/framework can't be reliably distinguished from its file extension alone (e.g. Bun vs Node both use `.ts`), scope broadly and rely on `setup-agents`'s dependency/config-file detection to keep the rule out of projects that don't use that stack in the first place — see `skills/setup-agents/references/rules-catalog.md`.
 
 See [Claude Code docs](https://code.claude.com/docs/en/memory#path-specific-rules) for glob pattern syntax.

@@ -1,5 +1,5 @@
 {
-  "description": "claude-code-starter safety guardrails: block dangerous commands, secret leaks, edits to protected files, and writes to build artifacts.",
+  "description": "agent-starter safety guardrails: block dangerous commands, secret leaks, edits to protected files, and writes to build artifacts.",
   "hooks": {
     "PreToolUse": [
       {

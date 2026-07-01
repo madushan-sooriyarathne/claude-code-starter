@@ -1,0 +1,6 @@
+{
+  "name": "write into dist/ build dir mapped to deny",
+  "stdin": { "toolCall": { "name": "write_to_file", "args": { "TargetFile": "dist/app.js", "CodeContent": "x" } } },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["\"decision\":\"deny\""]
+}

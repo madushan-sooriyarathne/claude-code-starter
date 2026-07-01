@@ -1,0 +1,7 @@
+{
+  "name": "terminationReason is included in the dry-run message",
+  "stdin": { "executionNum": 1, "terminationReason": "max_steps_exceeded", "error": "", "fullyIdle": true, "conversationId": "ag-notify-3" },
+  "env": { "AGENT_STARTER_NOTIFY_DRYRUN": "1" },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["max_steps_exceeded"]
+}

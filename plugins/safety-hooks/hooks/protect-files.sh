@@ -1,1 +1,1 @@
-../../../hooks/protect-files.sh
+../../../hooks/claude/protect-files.sh

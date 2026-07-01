@@ -1,0 +1,6 @@
+{
+  "name": "invocationNum 0 in a git repo injects a branch context ephemeralMessage",
+  "stdin": { "invocationNum": 0, "initialNumSteps": 0, "conversationId": "ag-session-2" },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["injectSteps", "ephemeralMessage"]
+}

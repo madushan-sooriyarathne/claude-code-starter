@@ -7,10 +7,10 @@ Skills are slash commands you invoke with `/name`. They run in the main conversa
 
 ## Available skills
 
-### /setup-claude
+### /setup-agents
 **Trigger**: Manual only
 
-Set up claude-code-starter in any project on an install-nothing-without-evidence basis. Deep-scans the codebase (manifests, real source and test files, directory layout, git workflow, existing AI configs like `.cursorrules`), interviews you about scope and preferences, then proposes an install plan where every rule, hook, agent, and skill is justified by scan evidence. Only the approved plan is copied in, customized to the stack (real commands, real path globs, hooks wired only if installed). On an existing `.claude/` it runs as a gap analysis: add what's missing, propose removing what's unjustified. Confirms every change before applying.
+Set up agent-starter in any project on an install-nothing-without-evidence basis. Deep-scans the codebase (manifests, real source and test files, directory layout, git workflow, existing AI configs like `.cursorrules`), interviews you about scope and preferences, then proposes an install plan where every rule, hook, agent, and skill is justified by scan evidence. Only the approved plan is copied in, customized to the stack (real commands, real path globs, hooks wired only if installed). On an existing `.claude/` it runs as a gap analysis: add what's missing, propose removing what's unjustified. Confirms every change before applying.
 
 ### /debug-fix [issue, error, or description] [--fast]
 **Trigger**: Manual only

@@ -1,0 +1,6 @@
+{
+  "name": "rm -rf / mapped to deny decision",
+  "stdin": { "toolCall": { "name": "run_command", "args": { "CommandLine": "rm -rf /" } } },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["\"decision\":\"deny\""]
+}

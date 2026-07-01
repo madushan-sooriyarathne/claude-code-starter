@@ -1,1 +1,1 @@
-../../../hooks/format-on-save.sh
+../../../hooks/claude/format-on-save.sh

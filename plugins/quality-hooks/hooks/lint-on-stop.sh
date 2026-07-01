@@ -1,1 +1,1 @@
-../../../hooks/lint-on-stop.sh
+../../../hooks/claude/lint-on-stop.sh

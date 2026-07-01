@@ -1,0 +1,6 @@
+{
+  "name": "Stop against this repo's working tree completes without crashing",
+  "stdin": { "executionNum": 1, "terminationReason": "model_stop", "error": "", "fullyIdle": true, "conversationId": "ag-autotest-2" },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["\"decision\":\"ok\""]
+}

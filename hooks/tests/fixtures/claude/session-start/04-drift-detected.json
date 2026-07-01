@@ -1,0 +1,7 @@
+{
+  "name": "stale fingerprint triggers one-line drift nudge (run from repo root)",
+  "stdin": {},
+  "env": { "AGENT_STARTER_META": "hooks/tests/fixtures/claude/session-start/data/meta-stale.json" },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["config drift", "/setup-agents"]
+}

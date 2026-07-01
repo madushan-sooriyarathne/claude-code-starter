@@ -1,6 +1,6 @@
 # Project Instructions
 
-> REPLACE: Customize this file for your project. Delete sections that don't apply. Every line costs tokens. Code style lives in `.claude/rules/code-quality.md`, don't duplicate here. Run `/setup-claude` to auto-customize, or edit manually and delete all `> REPLACE:` blocks when done. Target: under 25 non-blank lines after customization. Hard cap: 50.
+> REPLACE: Customize this file for your project. Delete sections that don't apply. Every line costs tokens. Code style lives in `.claude/rules/code-quality.md`, don't duplicate here. Run `/setup-agents` to auto-customize, or edit manually and delete all `> REPLACE:` blocks when done. Target: under 25 non-blank lines after customization. Hard cap: 50.
 
 ## Commands
 

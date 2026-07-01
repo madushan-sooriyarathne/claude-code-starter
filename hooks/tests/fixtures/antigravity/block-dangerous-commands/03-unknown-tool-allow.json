@@ -1,0 +1,6 @@
+{
+  "name": "unmatched tool name passes through as allow",
+  "stdin": { "toolCall": { "name": "view_file", "args": { "AbsolutePath": "/etc/hosts" } } },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["\"decision\":\"allow\""]
+}

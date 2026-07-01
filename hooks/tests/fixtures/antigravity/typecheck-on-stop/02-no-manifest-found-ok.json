@@ -1,0 +1,6 @@
+{
+  "name": "Stop in this repo (no package.json/go.mod/Cargo.toml) exits ok without erroring",
+  "stdin": { "executionNum": 1, "terminationReason": "model_stop", "error": "", "fullyIdle": true, "conversationId": "ag-typecheck-2" },
+  "expect_exit": 0,
+  "expect_stdout_contains": ["\"decision\":\"ok\""]
+}

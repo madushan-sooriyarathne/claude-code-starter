@@ -1,1 +1,1 @@
-../../../hooks/scan-secrets.sh
+../../../hooks/claude/scan-secrets.sh

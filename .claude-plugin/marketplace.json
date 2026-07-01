@@ -1,6 +1,6 @@
 {
 	"$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-	"name": "claude-code-starter",
+	"name": "agent-starter",
 	"owner": {
 		"name": "Madushan Sooriyarathne",
 		"email": "hello@madushan.dev"
@@ -195,9 +195,9 @@
 			"category": "security"
 		},
 		{
-			"name": "setup-claude",
-			"source": "./plugins/setup-claude",
-			"description": "Set up claude-code-starter in any project. Deep-scans the codebase, interviews you, then installs and customizes only the components the project actually needs.",
+			"name": "setup-agents",
+			"source": "./plugins/setup-agents",
+			"description": "Set up agent-starter for Claude Code (.claude/) or Antigravity (.agents/). Deep-scans the codebase, interviews you, then installs and customizes only the components the project actually needs.",
 			"author": {
 				"name": "Madushan Sooriyarathne",
 				"email": "hello@madushan.dev"

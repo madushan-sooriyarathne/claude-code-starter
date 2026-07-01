@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Hook test runner. Iterates every fixture under hooks/tests/fixtures/<hook>/
-# and invokes hooks/<hook>.sh with the fixture's stdin, comparing exit code
-# and stdout/stderr substrings against the fixture's expectations.
+# Hook test runner. Iterates every fixture under
+# hooks/tests/fixtures/<host>/<hook>/ and invokes hooks/<host>/<hook>.sh with
+# the fixture's stdin, comparing exit code and stdout/stderr substrings
+# against the fixture's expectations. <host> is "claude" or "antigravity".
 #
 # Fixture format (JSON):
 #   {
@@ -30,9 +31,10 @@ FAIL=0
 FAILED_NAMES=()
 
 run_case() {
-  local hook_name="$1"
-  local fixture="$2"
-  local hook_path="$ROOT/${hook_name}.sh"
+  local host="$1"
+  local hook_name="$2"
+  local fixture="$3"
+  local hook_path="$ROOT/$host/${hook_name}.sh"
   [[ -x "$hook_path" ]] || chmod +x "$hook_path" 2>/dev/null || true
 
   local name stdin expect_exit
@@ -81,25 +83,29 @@ run_case() {
   check_subs "expect_stderr_contains"     "$err_file" "no"
 
   if [[ $ok -eq 1 ]]; then
-    printf '  PASS  %s :: %s\n' "$hook_name" "$name"
+    printf '  PASS  %s/%s :: %s\n' "$host" "$hook_name" "$name"
     PASS=$((PASS+1))
   else
-    printf '  FAIL  %s :: %s (exit=%s, expected=%s)\n' "$hook_name" "$name" "$actual_exit" "$expect_exit"
+    printf '  FAIL  %s/%s :: %s (exit=%s, expected=%s)\n' "$host" "$hook_name" "$name" "$actual_exit" "$expect_exit"
     printf '        stdout: %s\n' "$(head -c 500 "$out_file")"
     [[ -s "$err_file" ]] && printf '        stderr: %s\n' "$(head -c 500 "$err_file")"
     FAIL=$((FAIL+1))
-    FAILED_NAMES+=("$hook_name::$name")
+    FAILED_NAMES+=("$host/$hook_name::$name")
   fi
   rm -f "$out_file" "$err_file"
 }
 
-for dir in "$FIXTURES"/*/; do
-  [[ -d "$dir" ]] || continue
-  hook_name=$(basename "$dir")
-  echo "== $hook_name =="
-  for f in "$dir"*.json; do
-    [[ -f "$f" ]] || continue
-    run_case "$hook_name" "$f"
+for host_dir in "$FIXTURES"/*/; do
+  [[ -d "$host_dir" ]] || continue
+  host=$(basename "$host_dir")
+  for dir in "$host_dir"*/; do
+    [[ -d "$dir" ]] || continue
+    hook_name=$(basename "$dir")
+    echo "== $host/$hook_name =="
+    for f in "$dir"*.json; do
+      [[ -f "$f" ]] || continue
+      run_case "$host" "$hook_name" "$f"
+    done
   done
 done
 

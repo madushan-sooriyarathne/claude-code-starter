@@ -1,0 +1,8 @@
+{
+  "name": "fullyIdle false does not notify",
+  "stdin": { "executionNum": 1, "terminationReason": "model_stop", "error": "", "fullyIdle": false, "conversationId": "ag-notify-2" },
+  "env": { "AGENT_STARTER_NOTIFY_DRYRUN": "1" },
+  "expect_exit": 0,
+  "expect_stdout_not_contains": ["notify:"],
+  "expect_stdout_contains": ["\"decision\":\"ok\""]
+}

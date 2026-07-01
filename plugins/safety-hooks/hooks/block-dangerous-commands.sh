@@ -1,1 +1,1 @@
-../../../hooks/block-dangerous-commands.sh
+../../../hooks/claude/block-dangerous-commands.sh
